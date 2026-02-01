@@ -3,35 +3,45 @@ package com.dg.electricitycounter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.widget.Toast
-import java.text.SimpleDateFormat
-import java.util.*
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        val reminderType = intent.getStringExtra("reminder_type") ?: "first"
+        val action = intent.action
+        
+        when {
+            // 🔧 ВОССТАНОВЛЕНИЕ ПОСЛЕ ПЕРЕЗАГРУЗКИ
+            action == Intent.ACTION_BOOT_COMPLETED -> {
+                handleBootCompleted(context)
+            }
+            // Обычное напоминание
+            else -> {
+                handleReminder(context, reminderType)
+            }
+        }
+    }
+    
+    private fun handleBootCompleted(context: Context) {
+        // Проверяем, были ли включены напоминания
+        val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
+        val isReminderEnabled = prefs.getBoolean("reminder_enabled", false)
+        
+        if (isReminderEnabled) {
+            // Восстанавливаем напоминания
+            val scheduler = ReminderScheduler(context)
+            scheduler.scheduleMonthlyReminder()
+        }
+    }
+    
+    private fun handleReminder(context: Context, reminderType: String) {
         val scheduler = ReminderScheduler(context)
         val notificationHelper = NotificationHelper(context)
         
-        val reminderType = intent.getStringExtra("reminder_type") ?: "first"
-        
-        // Всегда показываем уведомление, если сработал будильник
+        // Показываем уведомление
         notificationHelper.showReminderNotification()
         
-        // Для отладки
-        val currentTime = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-            .format(Date())
-        Toast.makeText(
-            context,
-            "🔔 Напоминание ($reminderType) сработало в $currentTime",
-            Toast.LENGTH_LONG
-        ).show()
-        
-        // Если это было первое напоминание (24 число), планируем следующее на завтра
-        if (reminderType == "first") {
-            scheduler.scheduleNextDayReminder()
-        }
-        // Если это ежедневное напоминание, планируем следующее на завтра
-        else if (reminderType == "daily") {
+        // Планируем следующее напоминание на завтра
+        if (reminderType == "first" || reminderType == "daily") {
             scheduler.scheduleNextDayReminder()
         }
     }
