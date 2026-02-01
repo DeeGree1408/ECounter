@@ -1,0 +1,427 @@
+package com.yourapp.electricitycounter.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CopyAll
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HistoryScreen(
+    onBack: () -> Unit
+) {
+    // Примерные данные для истории (в реальном приложении брать из базы данных)
+    val historyItems = remember {
+        listOf(
+            HistoryItem(
+                id = 1,
+                date = "25.12.2024 14:30",
+                previous = 980.0,
+                current = 1000.0,
+                consumption = 20.0,
+                tariff = 5.5,
+                amount = 110.0
+            ),
+            HistoryItem(
+                id = 2,
+                date = "25.11.2024 15:45",
+                previous = 960.0,
+                current = 980.0,
+                consumption = 20.0,
+                tariff = 5.5,
+                amount = 110.0
+            ),
+            HistoryItem(
+                id = 3,
+                date = "25.10.2024 16:20",
+                previous = 940.0,
+                current = 960.0,
+                consumption = 20.0,
+                tariff = 5.5,
+                amount = 110.0
+            )
+        )
+    }
+    
+    var showEmptyState by remember { mutableStateOf(historyItems.isEmpty()) }
+    var copiedItemId by remember { mutableStateOf<Int?>(null) }
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.History,
+                            contentDescription = "История",
+                            tint = Color(0xFFFF8C00)
+                        )
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text("История расчётов")
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .padding(16.dp)
+        ) {
+            if (showEmptyState) {
+                // Пустая история
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Default.History,
+                        contentDescription = "Пустая история",
+                        tint = Color.Gray,
+                        modifier = Modifier.padding(bottom = 16.dp)
+                    )
+                    Text(
+                        text = "История расчётов пуста",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Сделайте первый расчёт на вкладке 'Калькулятор'!",
+                        fontSize = 14.sp,
+                        color = Color.Gray,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = onBack,
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E3C72)
+                        )
+                    ) {
+                        Text("Перейти к калькулятору")
+                    }
+                }
+            } else {
+                // Статистика
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFE7F3FF)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "📊 Статистика",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E3C72),
+                            fontSize = 16.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = historyItems.size.toString(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
+                                    color = Color(0xFF1E3C72)
+                                )
+                                Text(
+                                    text = "записей",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = String.format("%.2f", historyItems.sumOf { it.amount }),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
+                                    color = Color(0xFF1E3C72)
+                                )
+                                Text(
+                                    text = "всего оплачено",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = String.format("%.1f", historyItems.sumOf { it.consumption }),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 20.sp,
+                                    color = Color(0xFF1E3C72)
+                                )
+                                Text(
+                                    text = "кВт·ч всего",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Список истории
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(historyItems) { item ->
+                        HistoryItemCard(
+                            item = item,
+                            onCopy = { 
+                                copiedItemId = item.id
+                                // В реальном приложении тут копирование в буфер обмена
+                            },
+                            onDelete = {
+                                // В реальном приложении тут удаление
+                            },
+                            isCopied = copiedItemId == item.id
+                        )
+                    }
+                }
+                
+                // Кнопка очистки истории
+                Button(
+                    onClick = { 
+                        showEmptyState = true 
+                        // В реальном приложении тут очистка базы данных
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFDC3545)
+                    )
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Text("Очистить всю историю")
+                }
+            }
+        }
+    }
+}
+
+// Модель для элемента истории
+data class HistoryItem(
+    val id: Int,
+    val date: String,
+    val previous: Double,
+    val current: Double,
+    val consumption: Double,
+    val tariff: Double,
+    val amount: Double
+)
+
+@Composable
+fun HistoryItemCard(
+    item: HistoryItem,
+    onCopy: () -> Unit,
+    onDelete: () -> Unit,
+    isCopied: Boolean
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Заголовок с датой
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = item.date,
+                    fontSize = 12.sp,
+                    color = Color.Gray
+                )
+                if (isCopied) {
+                    Text(
+                        text = "✓ Скопировано",
+                        fontSize = 10.sp,
+                        color = Color(0xFF28A745),
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Данные расчета
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Показания",
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${item.previous.toInt()} → ${item.current.toInt()}",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Потребление",
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${String.format("%.1f", item.consumption)} кВт·ч",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Тариф",
+                        fontSize = 10.sp,
+                        color = Color.Gray
+                    )
+                    Text(
+                        text = "${String.format("%.2f", item.tariff)} ₽",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Сумма
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFF1E3C72)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Сумма к оплате:",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = "${String.format("%.2f", item.amount)} ₽",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Банковская строка
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF8F9FA)
+                ),
+                shape = RoundedCornerShape(8.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "Электроэнергия уч.143а (${item.consumption.toInt()} кВт·ч), текущие показания ${item.current.toInt()} на ${item.date}",
+                        fontSize = 11.sp,
+                        color = Color(0xFF495057),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // Кнопки действий
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = onCopy,
+                    modifier = Modifier.weight(1f),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1E3C72)
+                    )
+                ) {
+                    Icon(Icons.Default.CopyAll, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Text("Копировать")
+                }
+                
+                Button(
+                    onClick = onDelete,
+                    modifier = Modifier.weight(1f),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFDC3545)
+                    )
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.padding(4.dp))
+                    Text("Удалить")
+                }
+            }
+        }
+    }
+}

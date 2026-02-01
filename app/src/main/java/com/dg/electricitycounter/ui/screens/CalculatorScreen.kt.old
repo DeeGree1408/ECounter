@@ -1,0 +1,392 @@
+package com.yourapp.electricitycounter.ui.screens
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Calculate
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LockOpen
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.Money
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material3.IconButton
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CalculatorScreen(
+    onNavigateToReminders: () -> Unit,
+    onNavigateToHistory: () -> Unit
+) {
+    var currentReading by remember { mutableStateOf("") }
+    var tariff by remember { mutableStateOf("5.5") }
+    var previousReading by remember { mutableStateOf("1000") }
+    var isTariffLocked by remember { mutableStateOf(true) }
+    var isPreviousLocked by remember { mutableStateOf(true) }
+    var resultText by remember { mutableStateOf("") }
+    
+    Scaffold { paddingValues ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF0F2027),
+                            Color(0xFF203A43),
+                            Color(0xFF2C5364)
+                        )
+                    )
+                )
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Заголовок с молнией
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "⚡",
+                        fontSize = 48.sp,
+                        color = Color(0xFFFFD700)
+                    )
+                    Text(
+                        text = "Электросчётчик",
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Учёт и расчёт электроэнергии",
+                        fontSize = 14.sp,
+                        color = Color(0xFFAAAAAA)
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Навигационные табы
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = { /* Уже тут */ },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E3C72)
+                        )
+                    ) {
+                        Text("Калькулятор")
+                    }
+                    
+                    Button(
+                        onClick = onNavigateToReminders,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF2A5298)
+                        )
+                    ) {
+                        Text("Напоминания")
+                    }
+                    
+                    Button(
+                        onClick = onNavigateToHistory,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF8C00)
+                        )
+                    ) {
+                        Text("История")
+                    }
+                }
+                
+                // Карточка с полями ввода
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White
+                    ),
+                    elevation = CardDefaults.cardElevation(8.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // Тариф с защитой
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Money,
+                                        contentDescription = "Тариф",
+                                        tint = Color(0xFF28A745)
+                                    )
+                                    Spacer(modifier = Modifier.padding(4.dp))
+                                    Text(
+                                        text = "Тариф (руб/кВт·ч)",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "действует с 01.01.2024",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    modifier = Modifier
+                                        .background(Color(0xFFF7FAFC))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                            OutlinedTextField(
+                                value = tariff,
+                                onValueChange = { tariff = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isTariffLocked,
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { isTariffLocked = !isTariffLocked }
+                                    ) {
+                                        Icon(
+                                            if (isTariffLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                            contentDescription = "Защита",
+                                            tint = if (isTariffLocked) Color.Gray else Color(0xFF28A745)
+                                        )
+                                    }
+                                },
+                                suffix = { Text(" ₽") }
+                            )
+                        }
+                        
+                        // Предыдущие показания с защитой
+                        Column {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.History,
+                                        contentDescription = "История",
+                                        tint = Color(0xFF6F42C1)
+                                    )
+                                    Spacer(modifier = Modifier.padding(4.dp))
+                                    Text(
+                                        text = "Предыдущие показания",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = "нет данных",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray,
+                                    modifier = Modifier
+                                        .background(Color(0xFFF7FAFC))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                            OutlinedTextField(
+                                value = previousReading,
+                                onValueChange = { previousReading = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !isPreviousLocked,
+                                trailingIcon = {
+                                    IconButton(
+                                        onClick = { isPreviousLocked = !isPreviousLocked }
+                                    ) {
+                                        Icon(
+                                            if (isPreviousLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                            contentDescription = "Защита",
+                                            tint = if (isPreviousLocked) Color.Gray else Color(0xFF28A745)
+                                        )
+                                    }
+                                },
+                                suffix = { Text(" кВт·ч") }
+                            )
+                        }
+                        
+                        // Текущие показания
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Speed,
+                                    contentDescription = "Счетчик",
+                                    tint = Color(0xFF007BFF)
+                                )
+                                Spacer(modifier = Modifier.padding(4.dp))
+                                Text(
+                                    text = "Текущие показания",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            OutlinedTextField(
+                                value = currentReading,
+                                onValueChange = { currentReading = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("Введите текущие показания") },
+                                suffix = { Text(" кВт·ч") }
+                            )
+                        }
+                    }
+                }
+                
+                // Кнопки действий
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            // Расчет
+                            val current = currentReading.toDoubleOrNull()
+                            val prev = previousReading.toDoubleOrNull()
+                            val tar = tariff.toDoubleOrNull()
+                            
+                            if (current != null && prev != null && tar != null) {
+                                if (current < prev) {
+                                    resultText = "⚠️ Текущие показания меньше предыдущих!"
+                                } else {
+                                    val consumption = current - prev
+                                    val amount = consumption * tar
+                                    resultText = """
+                                        📊 Результат расчета:
+                                        
+                                        Израсходовано: ${String.format("%.1f", consumption)} кВт·ч
+                                        Тариф: ${String.format("%.2f", tar)} ₽/кВт·ч
+                                        Сумма к оплате: ${String.format("%.2f", amount)} ₽
+                                        
+                                        ✅ Расчет завершен!
+                                    """.trimIndent()
+                                }
+                            } else {
+                                resultText = "❌ Пожалуйста, заполните все поля корректно!"
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF8C00)
+                        )
+                    ) {
+                        Icon(Icons.Default.Calculate, contentDescription = null)
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text("Рассчитать")
+                    }
+                    
+                    OutlinedButton(
+                        onClick = { 
+                            currentReading = ""
+                            tariff = "5.5"
+                            previousReading = "1000"
+                            isTariffLocked = true
+                            isPreviousLocked = true
+                            resultText = ""
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(Icons.Default.Clear, contentDescription = null)
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text("Очистить")
+                    }
+                }
+                
+                // Отображение результата
+                if (resultText.isNotEmpty()) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFD4EDDA)
+                        ),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = "📈 Результат расчета",
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF155724),
+                                fontSize = 18.sp
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = resultText,
+                                color = Color(0xFF155724),
+                                fontSize = 14.sp,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+                
+                // Информационная карточка
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFE7F3FF)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "💡 Как пользоваться:",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF1E3C72)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "1. Введите текущие показания счётчика\n" +
+                                  "2. Нажмите 'Рассчитать'\n" +
+                                  "3. Результат появится ниже\n" +
+                                  "4. Для изменения тарифа или предыдущих показаний - нажмите на замок 🔒",
+                            color = Color(0xFF666666),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

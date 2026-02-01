@@ -1,0 +1,40 @@
+package com.yourapp.electricitycounter.ui.navigation
+
+import androidx.compose.runtime.Composable
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.yourapp.electricitycounter.ui.screens.CalculatorScreen
+import com.yourapp.electricitycounter.ui.screens.HistoryScreen
+import com.yourapp.electricitycounter.ui.screens.RemindersScreen
+
+@Composable
+fun AppNavigation() {
+    val navController = rememberNavController()
+    
+    NavHost(
+        navController = navController,
+        startDestination = "calculator"
+    ) {
+        composable("calculator") {
+            CalculatorScreen(
+                onNavigateToReminders = {
+                    navController.navigate("reminders")
+                },
+                onNavigateToHistory = {
+                    navController.navigate("history")
+                }
+            )
+        }
+        composable("reminders") {
+            RemindersScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+        composable("history") {
+            HistoryScreen(
+                onBack = { navController.popBackStack() }
+            )
+        }
+    }
+}

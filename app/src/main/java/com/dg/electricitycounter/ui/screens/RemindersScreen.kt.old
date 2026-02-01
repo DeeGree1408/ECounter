@@ -1,0 +1,308 @@
+package com.yourapp.electricitycounter.ui.screens
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Bell
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RemindersScreen(
+    onBack: () -> Unit
+) {
+    var isReminderEnabled by remember { mutableStateOf(false) }
+    var reminderDay by remember { mutableStateOf("22") }
+    var reminderTime by remember { mutableStateOf("19:00") }
+    var testMessage by remember { mutableStateOf("") }
+    
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { 
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Bell,
+                            contentDescription = "Напоминания",
+                            tint = Color(0xFFFF8C00)
+                        )
+                        Spacer(modifier = Modifier.padding(4.dp))
+                        Text("Напоминания")
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                    }
+                }
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            // Основная карточка настроек
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(8.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                ) {
+                    // Заголовок и переключатель
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "Напоминания о показаниях",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1E3C72)
+                            )
+                            Text(
+                                text = if (isReminderEnabled) "🔔 Включено" else "🔕 Выключено",
+                                fontSize = 14.sp,
+                                color = if (isReminderEnabled) Color(0xFF28A745) else Color.Gray
+                            )
+                        }
+                        Switch(
+                            checked = isReminderEnabled,
+                            onCheckedChange = { isReminderEnabled = it }
+                        )
+                    }
+                    
+                    // Описание
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFE7F3FF)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Default.Info,
+                                    contentDescription = "Информация",
+                                    tint = Color(0xFF1E3C72)
+                                )
+                                Spacer(modifier = Modifier.padding(4.dp))
+                                Text(
+                                    text = "Как это работает?",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF1E3C72)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Напоминание будет приходить каждый день в указанное время, начиная с указанного числа месяца, пока вы не введете новые показания.",
+                                fontSize = 13.sp,
+                                color = Color(0xFF666666),
+                                lineHeight = 18.sp
+                            )
+                        }
+                    }
+                    
+                    // Настройки (показываются только если напоминания включены)
+                    if (isReminderEnabled) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // День месяца
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.CalendarToday,
+                                        contentDescription = "День",
+                                        tint = Color(0xFF1E3C72)
+                                    )
+                                    Spacer(modifier = Modifier.padding(4.dp))
+                                    Text(
+                                        text = "День месяца для начала напоминаний",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = reminderDay,
+                                    onValueChange = { 
+                                        val day = it.toIntOrNull()
+                                        if (day != null && day in 1..31) {
+                                            reminderDay = it
+                                        } else if (it.isEmpty()) {
+                                            reminderDay = it
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("Число от 1 до 31") },
+                                    suffix = { Text("число") }
+                                )
+                            }
+                            
+                            // Время
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Default.Schedule,
+                                        contentDescription = "Время",
+                                        tint = Color(0xFF1E3C72)
+                                    )
+                                    Spacer(modifier = Modifier.padding(4.dp))
+                                    Text(
+                                        text = "Время напоминания",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                OutlinedTextField(
+                                    value = reminderTime,
+                                    onValueChange = { reminderTime = it },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    placeholder = { Text("ЧЧ:ММ") }
+                                )
+                            }
+                            
+                            // Информация о следующем напоминании
+                            Card(
+                                colors = CardDefaults.cardColors(
+                                    containerColor = Color(0xFFD4EDDA)
+                                )
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = "📅 Следующее напоминание:",
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF155724)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "${reminderDay} числа в $reminderTime",
+                                        color = Color(0xFF155724),
+                                        fontSize = 16.sp
+                                    )
+                                }
+                            }
+                            
+                            // Тестовая кнопка
+                            Button(
+                                onClick = {
+                                    testMessage = "🔔 Тестовое напоминание отправлено!\n\n" +
+                                                 "Настоящее напоминание придет:\n" +
+                                                 "${reminderDay} числа в $reminderTime\n" +
+                                                 "а затем каждый день, пока не будут введены показания."
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF17A2B8)
+                                )
+                            ) {
+                                Icon(Icons.Default.Bell, contentDescription = null)
+                                Spacer(modifier = Modifier.padding(4.dp))
+                                Text("Тестовое уведомление")
+                            }
+                        }
+                    }
+                    
+                    // Кнопка возврата
+                    Button(
+                        onClick = onBack,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E3C72)
+                        )
+                    ) {
+                        Text("← Вернуться к калькулятору")
+                    }
+                }
+            }
+            
+            // Тестовое сообщение
+            if (testMessage.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFFFF3CD)
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            text = "Тестовое уведомление",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF856404)
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = testMessage,
+                            color = Color(0xFF856404),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+            }
+            
+            // Подсказка
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFF8F9FA)
+                )
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "💡 Совет:",
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF6C757D)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Установите напоминание на число, когда обычно снимаете показания счетчика (например, 22-25 число каждого месяца).",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6C757D),
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
+    }
+}

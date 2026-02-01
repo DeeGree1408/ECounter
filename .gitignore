@@ -1,0 +1,20 @@
+# Android Studio
+.idea/
+*.iml
+.gradle/
+build/
+local.properties
+.cxx/
+.externalNativeBuild/
+
+# Дополнительно (уже есть у вас)
+/captures
+.DS_Store
+
+# Старые правила (можно оставить, но они уже покрыты .idea/)
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/workspace.xml
+/.idea/navEditor.xml
+/.idea/assetWizardSettings.xml
