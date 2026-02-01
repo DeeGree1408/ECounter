@@ -1,6 +1,8 @@
 package com.dg.electricitycounter.presentation.calculator
 
 import android.content.Context
+import android.content.Intent
+import android.os.Environment
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dg.electricitycounter.ReminderScheduler
@@ -8,6 +10,7 @@ import com.dg.electricitycounter.data.local.PreferencesHelper
 import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.domain.usecase.AddReadingUseCase
 import com.dg.electricitycounter.domain.usecase.GetLatestReadingUseCase
+import com.dg.electricitycounter.domain.usecase.GetAllReadingsUseCase
 import com.dg.electricitycounter.util.formatToDisplay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -15,8 +18,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
@@ -26,6 +31,7 @@ class CalculatorViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val addReadingUseCase: AddReadingUseCase,
     private val getLatestReadingUseCase: GetLatestReadingUseCase,
+    private val getAllReadingsUseCase: GetAllReadingsUseCase,
     private val preferencesHelper: PreferencesHelper
 ) : ViewModel() {
     
@@ -36,7 +42,6 @@ class CalculatorViewModel @Inject constructor(
         loadData()
     }
     
-    // 🔧 СДЕЛАЛИ ПУБЛИЧНЫМ - ТЕПЕРЬ МОЖНО ВЫЗЫВАТЬ ИЗ SCREEN
     fun loadData() {
         viewModelScope.launch {
             // Загружаем настройки
@@ -157,6 +162,9 @@ class CalculatorViewModel @Inject constructor(
                     
                     // ОСТАНАВЛИВАЕМ НАПОМИНАНИЯ ПОСЛЕ ВВОДА ПОКАЗАНИЙ
                     stopRemindersIfEnabled()
+                    
+                    // 🔧 АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
+                    exportAndSendHistory()
                 }
                 result.onFailure { error ->
                     _uiState.update {
@@ -178,6 +186,66 @@ class CalculatorViewModel @Inject constructor(
         }
     }
     
+    private fun exportAndSendHistory() {
+        viewModelScope.launch {
+            try {
+                // Получаем всю историю
+                val readings = getAllReadingsUseCase().first()
+                
+                if (readings.isEmpty()) return@launch
+                
+                // Формируем текст истории
+                val historyText = readings.joinToString("\n") { reading ->
+                    val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                        .format(Date(reading.date))
+                    "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format("%.2f", reading.tariff)} ${String.format("%.2f", reading.amount)}"
+                }
+                
+                // Сохраняем в файл
+                val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val file = File(downloadsDir, fileName)
+                file.writeText(historyText, Charsets.UTF_8)
+                
+                // Формируем email
+                val emailBody = """
+                    История показаний счетчика:
+                    
+                    $historyText
+                    
+                    Всего записей: ${readings.size}
+                    Общий расход: ${readings.sumOf { it.consumption }.toInt()} кВт·ч
+                    Общая сумма: ${String.format("%.2f", readings.sumOf { it.amount })} ₽
+                    
+                    Отправлено из приложения "Электросчётчик"
+                """.trimIndent()
+                
+                val currentDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+                
+                // Создаем Intent для отправки email
+                val emailIntent = Intent(Intent.ACTION_SEND).apply {
+                    type = "message/rfc822"
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
+                    putExtra(Intent.EXTRA_SUBJECT, "показания счётчика $currentDate")
+                    putExtra(Intent.EXTRA_TEXT, emailBody)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                
+                // Пытаемся открыть почтовое приложение
+                try {
+                    context.startActivity(Intent.createChooser(emailIntent, "Отправить историю").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                } catch (e: Exception) {
+                    // Если нет почтового приложения - игнорируем
+                }
+                
+            } catch (e: Exception) {
+                // Игнорируем ошибки экспорта - не критично
+            }
+        }
+    }
+    
     private fun formatResult(reading: Reading): String {
         return """
             📊 ПОКАЗАНИЯ ПЕРЕДАНЫ
@@ -191,6 +259,7 @@ class CalculatorViewModel @Inject constructor(
             
             ✅ Предыдущие показания обновлены
             ✅ Запись добавлена в историю
+            📧 История отправлена на почту
             ${if (preferencesHelper.isReminderEnabled()) "\n🔕 Напоминания остановлены до следующего месяца" else ""}
         """.trimIndent()
     }
