@@ -163,7 +163,7 @@ class CalculatorViewModel @Inject constructor(
                     // ОСТАНАВЛИВАЕМ НАПОМИНАНИЯ ПОСЛЕ ВВОДА ПОКАЗАНИЙ
                     stopRemindersIfEnabled()
                     
-                    // 🔧 АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
+                    // АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
                     exportAndSendHistory()
                 }
                 result.onFailure { error ->
@@ -207,27 +207,29 @@ class CalculatorViewModel @Inject constructor(
                 val file = File(downloadsDir, fileName)
                 file.writeText(historyText, Charsets.UTF_8)
                 
-                // Формируем email
-                val emailBody = """
-                    История показаний счетчика:
-                    
-                    $historyText
-                    
-                    Всего записей: ${readings.size}
-                    Общий расход: ${readings.sumOf { it.consumption }.toInt()} кВт·ч
-                    Общая сумма: ${String.format("%.2f", readings.sumOf { it.amount })} ₽
-                    
-                    Отправлено из приложения "Электросчётчик"
-                """.trimIndent()
-                
                 val currentDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
                 
-                // Создаем Intent для отправки email
+                // СОЗДАЕМ URI ЧЕРЕЗ FileProvider
+                val uri = try {
+                    androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                } catch (e: Exception) {
+                    return@launch
+                }
+                
+                // Создаем Intent для отправки email С ВЛОЖЕНИЕМ
                 val emailIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "message/rfc822"
                     putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
                     putExtra(Intent.EXTRA_SUBJECT, "показания счётчика $currentDate")
-                    putExtra(Intent.EXTRA_TEXT, emailBody)
+                    putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
+                    
+                    // ПРИКРЕПЛЯЕМ ФАЙЛ
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 

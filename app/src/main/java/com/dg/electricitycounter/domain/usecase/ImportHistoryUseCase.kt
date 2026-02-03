@@ -19,12 +19,18 @@ class ImportHistoryUseCase @Inject constructor(
             val readings = mutableListOf<Reading>()
             var errorCount = 0
             
-            for (line in lines) {
+            // Проверяем первую строку на метаданные
+            var startIndex = 0
+            if (lines.isNotEmpty() && lines[0].startsWith("META|")) {
+                parseMetadata(lines[0])
+                startIndex = 1
+            }
+            
+            // Парсим записи
+            for (i in startIndex until lines.size) {
+                val line = lines[i]
                 val trimmedLine = line.trim()
                 if (trimmedLine.isEmpty()) continue
-                
-                // Пропускаем строки с META (для обратной совместимости)
-                if (trimmedLine.startsWith("META|")) continue
                 
                 try {
                     val parts = trimmedLine.split("\\s+".toRegex())
@@ -62,15 +68,21 @@ class ImportHistoryUseCase @Inject constructor(
                 // Заменяем всю историю новыми данными
                 repository.importReadings(readings)
                 
-                // 🔧 БЕРЁМ ТАРИФ ИЗ ПЕРВОЙ (САМОЙ СВЕЖЕЙ) ЗАПИСИ
-                val latestReading = readings.first()
-                val latestTariff = String.format("%.2f", latestReading.tariff).replace(',', '.')
-                val latestDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-                    .format(Date(latestReading.date))
+                // 🔧 ИЩЕМ ПЕРВОЕ ИЗМЕНЕНИЕ ТАРИФА
+                val latestTariff = readings.first().tariff
                 
-                // Сохраняем тариф и дату в настройки
-                preferencesHelper.saveTariff(latestTariff)
-                preferencesHelper.saveTariffChangeDate(latestDate)
+                // Находим последнюю (самую раннюю по дате) запись с этим тарифом
+                val firstTariffChange = readings.lastOrNull { it.tariff == latestTariff }
+                
+                if (firstTariffChange != null) {
+                    val tariffValue = String.format("%.2f", firstTariffChange.tariff).replace(',', '.')
+                    val tariffDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+                        .format(Date(firstTariffChange.date))
+                    
+                    // Сохраняем тариф и дату первого изменения
+                    preferencesHelper.saveTariff(tariffValue)
+                    preferencesHelper.saveTariffChangeDate(tariffDate)
+                }
                 
                 emit(Result.success(readings.size))
             } else {
@@ -79,6 +91,23 @@ class ImportHistoryUseCase @Inject constructor(
             
         } catch (e: Exception) {
             emit(Result.failure(e))
+        }
+    }
+    
+    private fun parseMetadata(metaLine: String) {
+        try {
+            // Формат: META|6.95|25.01.2026
+            val parts = metaLine.split("|")
+            if (parts.size >= 3) {
+                val tariff = parts[1]
+                val tariffDate = parts[2]
+                
+                // Сохраняем тариф и дату
+                preferencesHelper.saveTariff(tariff)
+                preferencesHelper.saveTariffChangeDate(tariffDate)
+            }
+        } catch (e: Exception) {
+            // Игнорируем ошибки парсинга метаданных
         }
     }
     
