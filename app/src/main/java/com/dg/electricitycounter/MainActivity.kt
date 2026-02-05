@@ -24,6 +24,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import com.dg.electricitycounter.presentation.statistics.StatisticsScreen
+
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -103,7 +105,7 @@ fun AppRoot(
 @Composable
 fun AppNavigation() {
     var currentScreen by remember { mutableStateOf("calculator") }
-    
+
     when (currentScreen) {
         "calculator" -> CalculatorScreen(
             onNavigateToReminders = { currentScreen = "reminders" },
@@ -113,7 +115,12 @@ fun AppNavigation() {
             onBack = { currentScreen = "calculator" }
         )
         "history" -> HistoryScreen(
-            onBack = { currentScreen = "calculator" }
+            onBack = { currentScreen = "calculator" },
+            onNavigateToStatistics = { currentScreen = "statistics" }
+        )
+        "statistics" -> StatisticsScreen(
+            onBack = { currentScreen = "history" }
         )
     }
 }
+

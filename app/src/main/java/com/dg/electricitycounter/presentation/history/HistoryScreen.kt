@@ -23,13 +23,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.util.formatToDisplay
+import androidx.compose.material.icons.filled.BarChart
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
     onBack: () -> Unit,
+    onNavigateToStatistics: () -> Unit,
     viewModel: HistoryViewModel = hiltViewModel()
 ) {
+
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
@@ -61,6 +64,16 @@ fun HistoryScreen(
                     }
                 },
                 actions = {
+                    // Кнопка Статистика
+                    IconButton(onClick = onNavigateToStatistics) {
+                        Icon(
+                            Icons.Default.BarChart,
+                            contentDescription = "Статистика",
+                            tint = Color(0xFF1E3C72)
+                        )
+                    }
+
+                    // Кнопка Удалить
                     if (uiState.readings.isNotEmpty()) {
                         IconButton(
                             onClick = viewModel::showDeleteDialog
@@ -73,6 +86,7 @@ fun HistoryScreen(
                         }
                     }
                 }
+
             )
         }
     ) { paddingValues ->

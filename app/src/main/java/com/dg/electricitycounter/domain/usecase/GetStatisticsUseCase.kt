@@ -43,22 +43,31 @@ class GetStatisticsUseCase @Inject constructor(
             }
             Period.LAST_YEAR -> {
                 val lastYear = Calendar.getInstance().get(Calendar.YEAR) - 1
-                calendar.set(Calendar.YEAR, lastYear)
-                calendar.set(Calendar.MONTH, Calendar.JANUARY)
-                calendar.set(Calendar.DAY_OF_MONTH, 1)
-                calendar.set(Calendar.HOUR_OF_DAY, 0)
-                calendar.set(Calendar.MINUTE, 0)
-                calendar.set(Calendar.SECOND, 0)
-                val start = calendar.timeInMillis
-                
-                calendar.set(Calendar.MONTH, Calendar.DECEMBER)
-                calendar.set(Calendar.DAY_OF_MONTH, 31)
-                calendar.set(Calendar.HOUR_OF_DAY, 23)
-                calendar.set(Calendar.MINUTE, 59)
-                val end = calendar.timeInMillis
-                
-                return readings.filter { it.date in start..end }
+                val startCalendar = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, lastYear)
+                    set(Calendar.MONTH, Calendar.JANUARY)
+                    set(Calendar.DAY_OF_MONTH, 1)
+                    set(Calendar.HOUR_OF_DAY, 0)
+                    set(Calendar.MINUTE, 0)
+                    set(Calendar.SECOND, 0)
+                    set(Calendar.MILLISECOND, 0)
+                }
+                val start = startCalendar.timeInMillis
+
+                val endCalendar = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, lastYear)
+                    set(Calendar.MONTH, Calendar.DECEMBER)
+                    set(Calendar.DAY_OF_MONTH, 31)
+                    set(Calendar.HOUR_OF_DAY, 23)
+                    set(Calendar.MINUTE, 59)
+                    set(Calendar.SECOND, 59)
+                    set(Calendar.MILLISECOND, 999)
+                }
+                val end = endCalendar.timeInMillis
+
+                return readings.filter { it.date >= start && it.date <= end }
             }
+
             Period.ALL -> return readings
         }
         
