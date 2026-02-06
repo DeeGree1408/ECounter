@@ -24,8 +24,6 @@ import java.util.*
 import androidx.compose.foundation.background
 import androidx.compose.ui.text.style.TextAlign
 
-
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(
@@ -212,68 +210,96 @@ fun BarChart(
     average: Double,
     modifier: Modifier = Modifier
 ) {
+    if (data.isEmpty()) return
+
     val maxValue = data.maxOfOrNull { it.consumption } ?: 1.0
 
     Column(modifier = modifier) {
-        // Подпись среднего сверху
-        Text(
-            text = "Средний расход: ${average.toInt()} кВт·ч",
-            fontSize = 12.sp,
-            color = Color.Gray,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        // Столбцы с подписями
+        // Подпись среднего
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Bottom
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "━ ━ ━  Средний: ${average.toInt()} кВт·ч  ━ ━ ━",
+                fontSize = 13.sp,
+                color = Color.Gray,
+                fontWeight = FontWeight.Bold
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Значения НАД столбцами
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             data.forEach { monthData ->
-                Column(
+                Text(
+                    text = "${monthData.consumption.toInt()}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    // Значение над столбцом
-                    Text(
-                        text = "${monthData.consumption.toInt()}",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
 
-                    // Столбец
-                    val barHeight = ((monthData.consumption / maxValue) * 160).dp
-                    Box(
-                        modifier = Modifier
-                            .width(30.dp)
-                            .height(barHeight)
-                            .background(
-                                color = if (monthData.isAboveAverage) {
-                                    Color(0xFFFF8C00) // Оранжевый
-                                } else {
-                                    Color(0xFF28A745) // Зелёный
-                                },
-                                shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)
-                            )
-                    )
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // САМ ГРАФИК
+        Canvas(modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp)
+            .padding(horizontal = 8.dp)
+        ) {
+            val spacing = 4.dp.toPx()
+            val barWidth = (size.width - spacing * (data.size + 1)) / data.size
+            val chartHeight = size.height - 20.dp.toPx()
+
+            // Рисуем пунктирную линию среднего
+            val averageY = (chartHeight - (average / maxValue * chartHeight).toFloat())
+            drawLine(
+                color = Color.Gray,
+                start = Offset(0f, averageY),
+                end = Offset(size.width, averageY),
+                strokeWidth = 2.dp.toPx(),
+                pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
+            )
+
+            // Рисуем столбцы
+            data.forEachIndexed { index, monthData ->
+                val x = spacing + index * (barWidth + spacing)
+                val barHeight = (monthData.consumption / maxValue * chartHeight).toFloat()
+                val y = chartHeight - barHeight
+
+                val barColor = if (monthData.isAboveAverage) {
+                    Color(0xFFFF8C00) // Оранжевый
+                } else {
+                    Color(0xFF28A745) // Зелёный
                 }
+
+                // Столбец
+                drawRect(
+                    color = barColor,
+                    topLeft = Offset(x, y),
+                    size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Подписи месяцев
+        // Названия месяцев ПОД столбцами
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             data.forEach { monthData ->
                 Text(
                     text = monthData.month,
-                    fontSize = 10.sp,
+                    fontSize = 11.sp,
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -281,6 +307,8 @@ fun BarChart(
         }
     }
 }
+
+
 
 
 

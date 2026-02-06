@@ -3,6 +3,7 @@ package com.dg.electricitycounter.presentation.statistics
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.dg.electricitycounter.data.local.PreferencesHelper
+import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.domain.usecase.CalculateForecastUseCase
 import com.dg.electricitycounter.domain.usecase.GetStatisticsUseCase
 import com.dg.electricitycounter.domain.usecase.GetTariffHistoryUseCase
@@ -16,8 +17,6 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 import javax.inject.Inject
-import com.dg.electricitycounter.domain.model.Reading
-
 
 @HiltViewModel
 class StatisticsViewModel @Inject constructor(
@@ -26,26 +25,26 @@ class StatisticsViewModel @Inject constructor(
     private val getTariffHistoryUseCase: GetTariffHistoryUseCase,
     private val preferencesHelper: PreferencesHelper
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(StatisticsUiState())
     val uiState: StateFlow<StatisticsUiState> = _uiState.asStateFlow()
-    
+
     init {
         loadStatistics(Period.SIX_MONTHS)
     }
-    
+
     fun onPeriodSelected(period: Period) {
         _uiState.update { it.copy(selectedPeriod = period) }
         loadStatistics(period)
     }
-    
+
     private fun loadStatistics(period: Period) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            
+
             getStatisticsUseCase(period)
                 .catch { e ->
-                    _uiState.update { 
+                    _uiState.update {
                         it.copy(
                             isLoading = false,
                             error = e.message
@@ -55,24 +54,36 @@ class StatisticsViewModel @Inject constructor(
                 .collect { readings ->
                     val stats = calculateStats(readings)
                     val currentTariff = preferencesHelper.getTariff().toDoubleOrNull() ?: 6.84
+
                     val forecast = if (period == Period.THREE_MONTHS || period == Period.SIX_MONTHS || period == Period.TWELVE_MONTHS) {
                         calculateForecastUseCase(readings, currentTariff)
                     } else {
                         null
                     }
 
-                    val tariffHistory = getTariffHistoryUseCase(readings, currentTariff)
-                    
                     _uiState.update {
                         it.copy(
                             readings = readings,
                             stats = stats,
                             forecast = forecast,
-                            tariffHistory = tariffHistory,
                             isLoading = false,
                             error = null
                         )
                     }
+
+                    // История тарифов - загружаем отдельно из ВСЕХ данных
+                    loadTariffHistory(currentTariff)
+                }
+        }
+    }
+
+    private fun loadTariffHistory(currentTariff: Double) {
+        viewModelScope.launch {
+            getStatisticsUseCase(Period.ALL)
+                .catch { }
+                .collect { allReadings ->
+                    val tariffHistory = getTariffHistoryUseCase(allReadings, currentTariff)
+                    _uiState.update { it.copy(tariffHistory = tariffHistory) }
                 }
         }
     }
@@ -100,7 +111,6 @@ class StatisticsViewModel @Inject constructor(
                 .replaceFirstChar { it.uppercase() }
                 .take(3)
 
-
             MonthData(
                 month = monthName,
                 consumption = reading.consumption,
@@ -117,5 +127,4 @@ class StatisticsViewModel @Inject constructor(
             monthlyData = monthlyData
         )
     }
-
 }
