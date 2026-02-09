@@ -21,13 +21,12 @@ class GetStatisticsUseCase @Inject constructor(
             emit(emptyList())
         }
     }
-    
+
     private fun filterByPeriod(readings: List<Reading>, period: Period): List<Reading> {
         if (period == Period.ALL) return readings
-        
+
         val calendar = Calendar.getInstance()
-        val currentTime = calendar.timeInMillis
-        
+
         val periodStart = when (period) {
             Period.THREE_MONTHS -> {
                 calendar.add(Calendar.MONTH, -3)
@@ -43,34 +42,31 @@ class GetStatisticsUseCase @Inject constructor(
             }
             Period.LAST_YEAR -> {
                 val lastYear = Calendar.getInstance().get(Calendar.YEAR) - 1
-                val startCalendar = Calendar.getInstance().apply {
-                    set(Calendar.YEAR, lastYear)
-                    set(Calendar.MONTH, Calendar.JANUARY)
-                    set(Calendar.DAY_OF_MONTH, 1)
-                    set(Calendar.HOUR_OF_DAY, 0)
-                    set(Calendar.MINUTE, 0)
-                    set(Calendar.SECOND, 0)
-                    set(Calendar.MILLISECOND, 0)
-                }
-                val start = startCalendar.timeInMillis
 
-                val endCalendar = Calendar.getInstance().apply {
-                    set(Calendar.YEAR, lastYear)
-                    set(Calendar.MONTH, Calendar.DECEMBER)
-                    set(Calendar.DAY_OF_MONTH, 31)
-                    set(Calendar.HOUR_OF_DAY, 23)
-                    set(Calendar.MINUTE, 59)
-                    set(Calendar.SECOND, 59)
-                    set(Calendar.MILLISECOND, 999)
-                }
-                val end = endCalendar.timeInMillis
+                // Для 2025 года нужны записи:
+                // - с датой в 2025 (кроме начала января - это показания за декабрь 2024)
+                // - с датой начала 2026 (показания за декабрь 2025)
 
-                return readings.filter { it.date >= start && it.date <= end }
+                return readings.filter { reading ->
+                    val calendar = Calendar.getInstance().apply {
+                        timeInMillis = reading.date
+                    }
+                    val year = calendar.get(Calendar.YEAR)
+                    val month = calendar.get(Calendar.MONTH)
+                    val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+                    when {
+                        // Записи с датой в нужном году (кроме начала января)
+                        year == lastYear && !(month == Calendar.JANUARY && day < 15) -> true
+                        // Начало следующего года (показания за декабрь нужного года)
+                        year == lastYear + 1 && month == Calendar.JANUARY && day < 15 -> true
+                        else -> false
+                    }
+                }
             }
-
             Period.ALL -> return readings
         }
-        
+
         return readings.filter { it.date >= periodStart }
     }
 }

@@ -107,9 +107,20 @@ class StatisticsViewModel @Inject constructor(
         val maxConsumption: Double = readings.maxOf { it.consumption }
 
         val monthlyData = readings.map { reading ->
-            val monthName = SimpleDateFormat("LLL", Locale("ru")).format(Date(reading.date))
+            val calendar = Calendar.getInstance().apply {
+                timeInMillis = reading.date
+            }
+            val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+            // Если передано в начале месяца (до 15) - это за ПРЕДЫДУЩИЙ месяц
+            if (day < 15) {
+                calendar.add(Calendar.MONTH, -1)
+            }
+
+            val monthName = SimpleDateFormat("LLL", Locale("ru")).format(calendar.time)
                 .replaceFirstChar { it.uppercase() }
                 .take(3)
+
 
             MonthData(
                 month = monthName,

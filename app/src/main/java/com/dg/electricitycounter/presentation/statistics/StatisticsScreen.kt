@@ -213,6 +213,7 @@ fun BarChart(
     if (data.isEmpty()) return
 
     val maxValue = data.maxOfOrNull { it.consumption } ?: 1.0
+    val fontSize = if (data.size > 10) 9.sp else 12.sp // Меньше шрифт для 12 мес
 
     Column(modifier = modifier) {
         // Подпись среднего
@@ -238,7 +239,7 @@ fun BarChart(
             data.forEach { monthData ->
                 Text(
                     text = "${monthData.consumption.toInt()}",
-                    fontSize = 12.sp,
+                    fontSize = fontSize,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -251,12 +252,12 @@ fun BarChart(
         // САМ ГРАФИК
         Canvas(modifier = Modifier
             .fillMaxWidth()
-            .height(180.dp)
+            .height(160.dp)
             .padding(horizontal = 8.dp)
         ) {
             val spacing = 4.dp.toPx()
             val barWidth = (size.width - spacing * (data.size + 1)) / data.size
-            val chartHeight = size.height - 20.dp.toPx()
+            val chartHeight = size.height
 
             // Рисуем пунктирную линию среднего
             val averageY = (chartHeight - (average / maxValue * chartHeight).toFloat())
@@ -291,7 +292,7 @@ fun BarChart(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Названия месяцев ПОД столбцами
+        // Названия месяцев ПОД графиком
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
@@ -299,7 +300,7 @@ fun BarChart(
             data.forEach { monthData ->
                 Text(
                     text = monthData.month,
-                    fontSize = 11.sp,
+                    fontSize = if (data.size > 10) 9.sp else 11.sp,
                     modifier = Modifier.weight(1f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
@@ -307,6 +308,7 @@ fun BarChart(
         }
     }
 }
+
 
 
 
