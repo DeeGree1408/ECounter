@@ -27,46 +27,40 @@ class GetStatisticsUseCase @Inject constructor(
 
         val calendar = Calendar.getInstance()
 
-        val periodStart = when (period) {
+        return when (period) {
             Period.THREE_MONTHS -> {
                 calendar.add(Calendar.MONTH, -3)
-                calendar.timeInMillis
+                readings.filter { it.date >= calendar.timeInMillis }
             }
             Period.SIX_MONTHS -> {
                 calendar.add(Calendar.MONTH, -6)
-                calendar.timeInMillis
+                readings.filter { it.date >= calendar.timeInMillis }
             }
             Period.TWELVE_MONTHS -> {
                 calendar.add(Calendar.MONTH, -12)
-                calendar.timeInMillis
+                readings.filter { it.date >= calendar.timeInMillis }
             }
             Period.LAST_YEAR -> {
                 val lastYear = Calendar.getInstance().get(Calendar.YEAR) - 1
 
-                // Для 2025 года нужны записи:
-                // - с датой в 2025 (кроме начала января - это показания за декабрь 2024)
-                // - с датой начала 2026 (показания за декабрь 2025)
-
-                return readings.filter { reading ->
-                    val calendar = Calendar.getInstance().apply {
+                readings.filter { reading ->
+                    val readingCalendar = Calendar.getInstance().apply {
                         timeInMillis = reading.date
                     }
-                    val year = calendar.get(Calendar.YEAR)
-                    val month = calendar.get(Calendar.MONTH)
-                    val day = calendar.get(Calendar.DAY_OF_MONTH)
+                    val year = readingCalendar.get(Calendar.YEAR)
+                    val month = readingCalendar.get(Calendar.MONTH)
+                    val day = readingCalendar.get(Calendar.DAY_OF_MONTH)
 
                     when {
-                        // Записи с датой в нужном году (кроме начала января)
+                        // Записи в нужном году (кроме начала января)
                         year == lastYear && !(month == Calendar.JANUARY && day < 15) -> true
-                        // Начало следующего года (показания за декабрь нужного года)
+                        // Начало следующего года (показания за декабрь)
                         year == lastYear + 1 && month == Calendar.JANUARY && day < 15 -> true
                         else -> false
                     }
                 }
             }
-            Period.ALL -> return readings
+            Period.ALL -> readings
         }
-
-        return readings.filter { it.date >= periodStart }
     }
 }

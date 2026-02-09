@@ -1,6 +1,7 @@
 package com.dg.electricitycounter.presentation.statistics
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,15 +15,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.util.*
-import androidx.compose.foundation.background
-import androidx.compose.ui.text.style.TextAlign
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,7 +30,7 @@ fun StatisticsScreen(
     viewModel: StatisticsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -57,7 +56,7 @@ fun StatisticsScreen(
                 selectedPeriod = uiState.selectedPeriod,
                 onPeriodSelected = viewModel::onPeriodSelected
             )
-            
+
             // ГРАФИК
             if (uiState.stats != null && uiState.stats!!.monthlyData.isNotEmpty()) {
                 BarChartCard(
@@ -65,22 +64,22 @@ fun StatisticsScreen(
                     average = uiState.stats!!.averageConsumption
                 )
             }
-            
+
             // ИТОГИ
             if (uiState.stats != null) {
                 SummaryCard(stats = uiState.stats!!, period = uiState.selectedPeriod)
             }
-            
+
             // ПРОГНОЗ
             if (uiState.forecast != null) {
                 ForecastCard(forecast = uiState.forecast!!)
             }
-            
+
             // ИСТОРИЯ ТАРИФОВ
             if (uiState.tariffHistory.isNotEmpty()) {
                 TariffHistoryCard(tariffHistory = uiState.tariffHistory)
             }
-            
+
             // КНОПКА НАЗАД
             Button(
                 onClick = onBack,
@@ -101,7 +100,7 @@ fun PeriodSelector(
     onPeriodSelected: (Period) -> Unit
 ) {
     val lastYear = Calendar.getInstance().get(Calendar.YEAR) - 1
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -147,7 +146,7 @@ fun PeriodButton(
         shape = RoundedCornerShape(8.dp),
         contentPadding = PaddingValues(4.dp)
     ) {
-        Text(text, fontSize = 11.sp, lineHeight = 13.sp)
+        Text(text, fontSize = 11.sp, lineHeight = 13.sp, textAlign = TextAlign.Center)
     }
 }
 
@@ -165,17 +164,11 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
                 fontSize = 16.sp
             )
             Spacer(modifier = Modifier.height(16.dp))
-            
-            BarChart(
-                data = monthlyData,
-                average = average,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(250.dp)
-            )
-            
+
+            BarChart(data = monthlyData, average = average)
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.Center
@@ -207,27 +200,23 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
 @Composable
 fun BarChart(
     data: List<MonthData>,
-    average: Double,
-    modifier: Modifier = Modifier
+    average: Double
 ) {
     if (data.isEmpty()) return
 
     val maxValue = data.maxOfOrNull { it.consumption } ?: 1.0
-    val fontSize = if (data.size > 10) 9.sp else 12.sp // Меньше шрифт для 12 мес
+    val fontSize = if (data.size >= 12) 8.sp else if (data.size > 6) 10.sp else 12.sp
 
-    Column(modifier = modifier) {
+    Column {
         // Подпись среднего
-        Row(
+        Text(
+            text = "━ ━ ━  Средний: ${average.toInt()} кВт·ч  ━ ━ ━",
+            fontSize = 13.sp,
+            color = Color.Gray,
+            fontWeight = FontWeight.Bold,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "━ ━ ━  Средний: ${average.toInt()} кВт·ч  ━ ━ ━",
-                fontSize = 13.sp,
-                color = Color.Gray,
-                fontWeight = FontWeight.Bold
-            )
-        }
+            textAlign = TextAlign.Center
+        )
 
         Spacer(modifier = Modifier.height(12.dp))
 
@@ -242,24 +231,25 @@ fun BarChart(
                     fontSize = fontSize,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    textAlign = TextAlign.Center
                 )
             }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
 
-        // САМ ГРАФИК
-        Canvas(modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp)
-            .padding(horizontal = 8.dp)
+        // ГРАФИК
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(220.dp)
+                .padding(horizontal = 8.dp)
         ) {
             val spacing = 4.dp.toPx()
             val barWidth = (size.width - spacing * (data.size + 1)) / data.size
             val chartHeight = size.height
 
-            // Рисуем пунктирную линию среднего
+            // Пунктирная линия среднего
             val averageY = (chartHeight - (average / maxValue * chartHeight).toFloat())
             drawLine(
                 color = Color.Gray,
@@ -269,19 +259,18 @@ fun BarChart(
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 8f))
             )
 
-            // Рисуем столбцы
+            // Столбцы
             data.forEachIndexed { index, monthData ->
                 val x = spacing + index * (barWidth + spacing)
                 val barHeight = (monthData.consumption / maxValue * chartHeight).toFloat()
                 val y = chartHeight - barHeight
 
                 val barColor = if (monthData.isAboveAverage) {
-                    Color(0xFFFF8C00) // Оранжевый
+                    Color(0xFFFF8C00)
                 } else {
-                    Color(0xFF28A745) // Зелёный
+                    Color(0xFF28A745)
                 }
 
-                // Столбец
                 drawRect(
                     color = barColor,
                     topLeft = Offset(x, y),
@@ -290,29 +279,28 @@ fun BarChart(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // Названия месяцев ПОД графиком
+        // НАЗВАНИЯ МЕСЯЦЕВ
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
             data.forEach { monthData ->
                 Text(
                     text = monthData.month,
-                    fontSize = if (data.size > 10) 9.sp else 11.sp,
+                    fontSize = if (data.size >= 12) 10.sp else 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.Black,
                     modifier = Modifier.weight(1f),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                    textAlign = TextAlign.Center
                 )
             }
         }
     }
 }
-
-
-
-
-
 
 @Composable
 fun SummaryCard(stats: PeriodStats, period: Period) {
@@ -323,7 +311,7 @@ fun SummaryCard(stats: PeriodStats, period: Period) {
         Period.LAST_YEAR -> "${Calendar.getInstance().get(Calendar.YEAR) - 1} ГОД"
         Period.ALL -> "ВСЁ ВРЕМЯ"
     }
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color(0xFFE7F3FF)),
@@ -338,7 +326,7 @@ fun SummaryCard(stats: PeriodStats, period: Period) {
                 color = Color(0xFF1E3C72)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             StatRow("💰 Оплачено:", "${String.format("%.2f", stats.totalPaid)} ₽")
             StatRow("⚡ Израсходовано:", "${String.format("%.0f", stats.totalConsumption)} кВт·ч")
             StatRow("📈 Средний расход:", "${String.format("%.0f", stats.averageConsumption)} кВт·ч")
@@ -376,10 +364,10 @@ fun ForecastCard(forecast: Forecast) {
                 color = Color(0xFF856404)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             StatRow("⚡ Ожидаемый расход:", "~${forecast.expectedConsumption} кВт·ч")
             StatRow("💰 Примерная сумма:", "~${String.format("%.2f", forecast.expectedAmount)} ₽")
-            
+
             Spacer(modifier = Modifier.height(8.dp))
             Text(
                 text = "ℹ️ На основе среднего за 3 месяца",
@@ -406,7 +394,7 @@ fun TariffHistoryCard(tariffHistory: List<TariffChange>) {
                 color = Color(0xFF1E3C72)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             tariffHistory.forEach { change ->
                 Row(
                     modifier = Modifier.fillMaxWidth(),
