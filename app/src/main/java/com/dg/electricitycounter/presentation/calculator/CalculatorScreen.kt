@@ -243,7 +243,7 @@ fun CalculatorScreen(
                         Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
                     Spacer(modifier = Modifier.padding(2.dp))
-                    Text("ПЕРЕДАТЬ ПОКАЗАНИЯ", fontSize = 12.sp)
+                    Text("ПЕРЕДАТЬ ПОКАЗАНИЯ", fontSize = 14.sp)
                 }
 
                 // РЕЗУЛЬТАТ РАСЧЁТА

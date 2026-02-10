@@ -160,7 +160,7 @@ fun WelcomeScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "📥 ИМПОРТИРОВАТЬ ДАННЫЕ",
+                                text = "📥 ИМПОРТ ДАННЫХ",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold
                             )
