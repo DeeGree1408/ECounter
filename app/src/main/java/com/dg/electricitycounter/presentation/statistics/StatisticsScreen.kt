@@ -157,23 +157,26 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
         elevation = CardDefaults.cardElevation(4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column {
+            // Заголовок с padding
             Text(
                 text = "📊 РАСХОД ПО МЕСЯЦАМ",
                 fontWeight = FontWeight.Bold,
-                fontSize = 16.sp
+                fontSize = 16.sp,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
             )
-            Spacer(modifier = Modifier.height(16.dp))
 
+            // График БЕЗ padding по бокам
             BarChart(data = monthlyData, average = average)
 
             Spacer(modifier = Modifier.height(12.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(16.dp)
@@ -222,10 +225,11 @@ fun BarChart(
 
         // Значения НАД столбцами
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            data.forEach { monthData ->
+
+        data.forEach { monthData ->
                 Text(
                     text = "${monthData.consumption.toInt()}",
                     fontSize = fontSize,
@@ -243,9 +247,9 @@ fun BarChart(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(220.dp)
-                .padding(horizontal = 8.dp)
         ) {
-            val spacing = 4.dp.toPx()
+
+        val spacing = 4.dp.toPx()
             val barWidth = (size.width - spacing * (data.size + 1)) / data.size
             val chartHeight = size.height
 
@@ -283,12 +287,11 @@ fun BarChart(
 
         // НАЗВАНИЯ МЕСЯЦЕВ
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            data.forEach { monthData ->
+
+        data.forEach { monthData ->
                 Text(
                     text = monthData.month,
                     fontSize = if (data.size >= 12) 10.sp else 12.sp,
