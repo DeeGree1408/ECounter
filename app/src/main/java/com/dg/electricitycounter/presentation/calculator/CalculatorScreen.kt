@@ -345,7 +345,7 @@ fun NavigationButton(
     ) {
         Text(
             text = text,
-            fontSize = 10.sp,
+            fontSize = 14.sp,
             maxLines = 1,
             letterSpacing = (-0.5).sp,
             overflow = TextOverflow.Ellipsis

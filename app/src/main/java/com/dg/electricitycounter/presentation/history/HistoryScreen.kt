@@ -56,7 +56,7 @@ fun HistoryScreen(
         topBar = {
             TopAppBar(
                 title = { 
-                    Text("📊 ИСТОРИЯ РАСЧЁТОВ", fontSize = 18.sp)
+                    Text("📊 ИСТОРИЯ РАСЧЁТОВ", fontSize = 16.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
