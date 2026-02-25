@@ -5,142 +5,292 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
-import android.widget.Toast
-import java.text.SimpleDateFormat
+import android.provider.Settings
+import android.util.Log
 import java.util.*
 
 class ReminderScheduler(private val context: Context) {
-    
+
+    private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    private val TAG = "ReminderScheduler"
+
     companion object {
-        const val REQUEST_CODE_24TH = 2001
-        const val REQUEST_CODE_DAILY = 2002
+        const val ACTION_REMINDER = "com.dg.electricitycounter.REMINDER"
+        const val REQUEST_CODE_REMINDER = 1001
     }
-    
-    fun scheduleMonthlyReminder() {
-        cancelAllReminders() // Отменяем все старые напоминания
+
+    /**
+     * Планирует напоминание на 24 число текущего или следующего месяца в 12:00
+     */
+    fun scheduleReminder() {
+        Log.d(TAG, "=== scheduleReminder START ===")
         
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        
-        // Планируем первое напоминание на 24 число в 12:00
-        val firstReminderDate = getNext24thDate()
-        
-        val firstIntent = Intent(context, ReminderReceiver::class.java).apply {
-            putExtra("reminder_type", "first")
+        // Проверяем разрешения
+        if (!canScheduleExactAlarms()) {
+            Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
+            requestExactAlarmPermission()
+            return
         }
-        val firstPendingIntent = PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE_24TH,
-            firstIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        setExactAlarm(alarmManager, firstReminderDate.timeInMillis, firstPendingIntent)
-        
-        // Для отладки
-        val sdf = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
-        Toast.makeText(
-            context,
-            "📅 Напоминание запланировано на: ${sdf.format(firstReminderDate.time)}",
-            Toast.LENGTH_LONG
-        ).show()
-    }
-    
-    private fun getNext24thDate(): Calendar {
-        val now = Calendar.getInstance()
-        val currentDay = now.get(Calendar.DAY_OF_MONTH)
-        val currentHour = now.get(Calendar.HOUR_OF_DAY)
-        
-        val targetDate = Calendar.getInstance().apply {
+
+        val calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+
+            // Если сегодня >= 24, то планируем на следующий месяц
+            if (get(Calendar.DAY_OF_MONTH) >= 24) {
+                add(Calendar.MONTH, 1)
+            }
             set(Calendar.DAY_OF_MONTH, 24)
-            set(Calendar.HOUR_OF_DAY, 12)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
         }
-        
-        // Если сегодня уже 24 число, но еще не 12:00
-        if (currentDay == 24 && currentHour < 12) {
-            return targetDate // сегодня в 12:00
-        }
-        
-        // Если сегодня 24 число и уже после 12:00, или если сегодня после 24 числа
-        if (currentDay >= 24) {
-            targetDate.add(Calendar.MONTH, 1) // следующий месяц
-        }
-        
-        return targetDate
-    }
-    
-    fun scheduleNextDayReminder() {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        
-        // Планируем напоминание на завтра в 12:00
-        // БЕЗ ВСЯКИХ ПРОВЕРОК - просто на завтра!
-        val tomorrow = Calendar.getInstance().apply {
-            add(Calendar.DAY_OF_MONTH, 1)
-            set(Calendar.HOUR_OF_DAY, 12)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
-        
-        val dailyIntent = Intent(context, ReminderReceiver::class.java).apply {
-            putExtra("reminder_type", "daily")
-        }
-        val dailyPendingIntent = PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE_DAILY,
-            dailyIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        
-        setExactAlarm(alarmManager, tomorrow.timeInMillis, dailyPendingIntent)
-    }
-    
-    private fun setExactAlarm(alarmManager: AlarmManager, triggerTime: Long, pendingIntent: PendingIntent) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(
-                AlarmManager.RTC_WAKEUP,
-                triggerTime,
-                pendingIntent
-            )
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            alarmManager.setExact(
-                AlarmManager.RTC_WAKEUP,
-                triggerTime,
-                pendingIntent
-            )
+
+        val triggerTime = calendar.timeInMillis
+        val pendingIntent = createPendingIntent()
+
+        // ГЛАВНОЕ ИЗМЕНЕНИЕ: используем setAlarmClock() для Huawei
+        if (isHuaweiDevice()) {
+            Log.d(TAG, "📱 Обнаружен Huawei - используем setAlarmClock()")
+            scheduleWithAlarmClock(triggerTime, pendingIntent)
         } else {
-            alarmManager.set(
-                AlarmManager.RTC_WAKEUP,
-                triggerTime,
-                pendingIntent
-            )
+            Log.d(TAG, "📱 Обычное устройство - используем setExactAndAllowWhileIdle()")
+            scheduleWithExactAlarm(triggerTime, pendingIntent)
+        }
+
+        Log.d(TAG, "✅ Напоминание запланировано на: ${calendar.time}")
+        Log.d(TAG, "⏰ Timestamp: $triggerTime (через ${(triggerTime - System.currentTimeMillis()) / 1000 / 60} минут)")
+        Log.d(TAG, "=== scheduleReminder END ===")
+    }
+
+    /**
+     * Планирует ежедневные напоминания с 25 числа
+     */
+    fun scheduleDailyReminders() {
+        Log.d(TAG, "=== scheduleDailyReminders START ===")
+        
+        if (!canScheduleExactAlarms()) {
+            Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
+            return
+        }
+
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+
+            // Если сегодня до 12:00, то сегодня в 12:00, иначе завтра
+            if (get(Calendar.HOUR_OF_DAY) >= 12) {
+                add(Calendar.DAY_OF_MONTH, 1)
+            }
+        }
+
+        val triggerTime = calendar.timeInMillis
+        val pendingIntent = createPendingIntent()
+
+        if (isHuaweiDevice()) {
+            Log.d(TAG, "📱 Huawei - ежедневное с setAlarmClock()")
+            scheduleWithAlarmClock(triggerTime, pendingIntent)
+        } else {
+            Log.d(TAG, "📱 Ежедневное с setExactAndAllowWhileIdle()")
+            scheduleWithExactAlarm(triggerTime, pendingIntent)
+        }
+
+        Log.d(TAG, "✅ Ежедневное напоминание на: ${calendar.time}")
+        Log.d(TAG, "=== scheduleDailyReminders END ===")
+    }
+
+    /**
+     * Отменяет все напоминания
+     */
+    fun cancelReminders() {
+        Log.d(TAG, "🛑 cancelReminders")
+        val pendingIntent = createPendingIntent()
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        Log.d(TAG, "✅ Напоминания отменены")
+    }
+
+    // ========== ПРИВАТНЫЕ МЕТОДЫ ==========
+
+    /**
+     * Создает PendingIntent для ReminderReceiver
+     */
+    private fun createPendingIntent(): PendingIntent {
+        val intent = Intent(context, ReminderReceiver::class.java).apply {
+            action = ACTION_REMINDER
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        return PendingIntent.getBroadcast(context, REQUEST_CODE_REMINDER, intent, flags)
+    }
+
+    /**
+     * Планирует с setAlarmClock() - для Huawei
+     * Показывает иконку в статус-баре, наивысший приоритет
+     */
+    private fun scheduleWithAlarmClock(triggerTime: Long, pendingIntent: PendingIntent) {
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(
+            triggerTime,
+            pendingIntent // showIntent - открывает приложение при нажатии на иконку
+        )
+        
+        try {
+            alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
+            Log.d(TAG, "✅ setAlarmClock() успешно")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Ошибка setAlarmClock(): ${e.message}", e)
         }
     }
-    
-    fun cancelAllReminders() {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        
-        // Отменяем первое напоминание (24 число)
-        val firstIntent = Intent(context, ReminderReceiver::class.java)
-        val firstPendingIntent = PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE_24TH,
-            firstIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(firstPendingIntent)
-        
-        // Отменяем ежедневные напоминания
-        val dailyIntent = Intent(context, ReminderReceiver::class.java)
-        val dailyPendingIntent = PendingIntent.getBroadcast(
-            context,
-            REQUEST_CODE_DAILY,
-            dailyIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(dailyPendingIntent)
+
+    /**
+     * Планирует с setExactAndAllowWhileIdle() - для обычных устройств
+     */
+    private fun scheduleWithExactAlarm(triggerTime: Long, pendingIntent: PendingIntent) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            } else {
+                alarmManager.setExact(
+                    AlarmManager.RTC_WAKEUP,
+                    triggerTime,
+                    pendingIntent
+                )
+            }
+            Log.d(TAG, "✅ setExactAndAllowWhileIdle() успешно")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Ошибка setExact(): ${e.message}", e)
+        }
+    }
+
+    /**
+     * Проверяет, Huawei ли это устройство
+     */
+    fun isHuaweiDevice(): Boolean {
+        val manufacturer = Build.MANUFACTURER.lowercase()
+        val isHuawei = manufacturer.contains("huawei") || manufacturer.contains("honor")
+        Log.d(TAG, "🔍 Производитель: $manufacturer, Huawei: $isHuawei")
+        return isHuawei
+    }
+
+    /**
+     * Проверяет разрешение SCHEDULE_EXACT_ALARM (Android 12+)
+     */
+    fun canScheduleExactAlarms(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val canSchedule = alarmManager.canScheduleExactAlarms()
+            Log.d(TAG, "🔍 canScheduleExactAlarms: $canSchedule")
+            canSchedule
+        } else {
+            true
+        }
+    }
+
+    /**
+     * Открывает настройки разрешения SCHEDULE_EXACT_ALARM
+     */
+    fun requestExactAlarmPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                Log.d(TAG, "🚀 Открыты настройки SCHEDULE_EXACT_ALARM")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Ошибка открытия настроек: ${e.message}", e)
+            }
+        }
+    }
+
+    /**
+     * Проверяет, находится ли приложение в исключениях батареи
+     */
+    fun isIgnoringBatteryOptimizations(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
+            val isIgnoring = powerManager.isIgnoringBatteryOptimizations(context.packageName)
+            Log.d(TAG, "🔋 Battery optimization ignored: $isIgnoring")
+            isIgnoring
+        } else {
+            true
+        }
+    }
+
+    /**
+     * Открывает настройки оптимизации батареи
+     */
+    fun requestIgnoreBatteryOptimizations() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                Log.d(TAG, "🚀 Открыты настройки оптимизации батареи")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Ошибка открытия настроек батареи: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Для Huawei - открывает настройки автозапуска (не стандартный Android)
+     */
+    fun openHuaweiSettings() {
+        try {
+            val intent = Intent().apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                
+                // Попытка 1: Настройки запуска
+                component = android.content.ComponentName(
+                    "com.huawei.systemmanager",
+                    "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
+                )
+            }
+            context.startActivity(intent)
+            Log.d(TAG, "🚀 Открыты настройки Huawei")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Не удалось открыть настройки Huawei: ${e.message}")
+            // Fallback - открываем общие настройки приложения
+            openAppSettings()
+        }
+    }
+
+    /**
+     * Открывает настройки приложения
+     */
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = android.net.Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(intent)
+            Log.d(TAG, "🚀 Открыты настройки приложения")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Ошибка открытия настроек: ${e.message}", e)
+        }
+    }
+
+    /**
+     * Получает время следующего срабатывания (для отображения)
+     */
+    fun getNextAlarmTime(): Long? {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val nextAlarmInfo = alarmManager.nextAlarmClock
+            nextAlarmInfo?.triggerTime?.also {
+                Log.d(TAG, "⏰ Следующий будильник: ${Date(it)}")
+            }
+        } else {
+            null
+        }
     }
 }

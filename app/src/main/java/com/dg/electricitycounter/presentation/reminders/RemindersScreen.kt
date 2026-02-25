@@ -39,6 +39,9 @@ fun RemindersScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     
+    // ✅ СОЗДАЕМ SCHEDULER ОДИН РАЗ
+    val scheduler = remember { ReminderScheduler(context) }
+    
     // Показываем сообщения
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -132,10 +135,8 @@ fun RemindersScreen(
                                 
                                 if (enabled) {
                                     // ВКЛЮЧАЕМ НАПОМИНАНИЯ
-                                    val scheduler = ReminderScheduler(context)
-                                    
                                     if (PermissionHelper.hasNotificationPermission(context)) {
-                                        scheduler.scheduleMonthlyReminder()
+                                        scheduler.scheduleReminder() // ✅ ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
                                         Toast.makeText(
                                             context,
                                             "✅ Напоминания включены!\nНачнутся 24 числа в 12:00",
@@ -152,8 +153,7 @@ fun RemindersScreen(
                                     }
                                 } else {
                                     // ВЫКЛЮЧАЕМ НАПОМИНАНИЯ
-                                    val scheduler = ReminderScheduler(context)
-                                    scheduler.cancelAllReminders()
+                                    scheduler.cancelReminders() // ✅ ИСПОЛЬЗУЕМ НОВЫЙ МЕТОД
                                     Toast.makeText(
                                         context,
                                         "🔕 Напоминания выключены",
@@ -376,6 +376,11 @@ fun RemindersScreen(
                             )
                         }
                     }
+                    
+                    // ========================================
+                    // ✅ ДОБАВЛЯЕМ ДИАГНОСТИКУ ЗДЕСЬ
+                    // ========================================
+                    DiagnosticSection(scheduler = scheduler)
                     
                     // КНОПКА НАЗАД
                     Button(

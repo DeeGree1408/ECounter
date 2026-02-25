@@ -181,8 +181,8 @@ class CalculatorViewModel @Inject constructor(
     private fun stopRemindersIfEnabled() {
         if (preferencesHelper.isReminderEnabled()) {
             val scheduler = ReminderScheduler(context)
-            scheduler.cancelAllReminders()
-            scheduler.scheduleMonthlyReminder()
+            scheduler.cancelReminders()
+            scheduler.scheduleReminder()
         }
     }
     
