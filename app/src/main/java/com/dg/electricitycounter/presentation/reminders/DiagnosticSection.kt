@@ -16,12 +16,12 @@ import java.util.*
  */
 @Composable
 fun DiagnosticSection(scheduler: ReminderScheduler) {
-    // ✅ КЕШИРУЕМ ЗНАЧЕНИЯ - вычисляются только при изменении scheduler
+    // Кешируем значения
     val isHuawei = remember(scheduler) { scheduler.isHuaweiDevice() }
     val canSchedule = remember(scheduler) { scheduler.canScheduleExactAlarms() }
     val batteryOptimized = remember(scheduler) { scheduler.isIgnoringBatteryOptimizations() }
     val nextAlarm = remember(scheduler) { scheduler.getNextAlarmTime() }
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -43,30 +43,30 @@ fun DiagnosticSection(scheduler: ReminderScheduler) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSecondaryContainer
             )
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             // Производитель
             DiagnosticRow(
                 label = "Производитель",
                 value = Build.MANUFACTURER,
                 isWarning = isHuawei
             )
-            
+
             // Разрешение SCHEDULE_EXACT_ALARM
             DiagnosticRow(
                 label = "Точные будильники",
                 value = if (canSchedule) "✅ Разрешено" else "❌ Запрещено",
                 isWarning = !canSchedule
             )
-            
+
             // Оптимизация батареи
             DiagnosticRow(
                 label = "Оптимизация батареи",
                 value = if (batteryOptimized) "✅ Отключена" else "⚠️ Включена",
                 isWarning = !batteryOptimized
             )
-            
+
             // Следующее срабатывание
             if (nextAlarm != null) {
                 DiagnosticRow(
@@ -75,17 +75,72 @@ fun DiagnosticSection(scheduler: ReminderScheduler) {
                     isWarning = false
                 )
             }
-            
+
+            // ========================================
+            // 🧪 КНОПКА ТЕСТОВОГО БУДИЛЬНИКА
+            // ========================================
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.tertiaryContainer
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "🧪 ТЕСТИРОВАНИЕ",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "Проверьте, работают ли напоминания прямо сейчас",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            scheduler.scheduleTestAlarm(2) // 2 минуты
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary
+                        )
+                    ) {
+                        Text("🧪 Тест через 2 минуты")
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "💡 Через 2 минуты должно прийти уведомление",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                }
+            }
+
             // Кнопки настроек (если Huawei или есть проблемы)
             val hasIssues = isHuawei || !canSchedule || !batteryOptimized
-            
+
             if (hasIssues) {
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 if (isHuawei) {
                     HuaweiWarningCard(scheduler)
                 }
-                
+
                 if (!canSchedule) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
@@ -98,7 +153,7 @@ fun DiagnosticSection(scheduler: ReminderScheduler) {
                         Text("⚠️ Разрешить точные будильники")
                     }
                 }
-                
+
                 if (!batteryOptimized) {
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
@@ -138,20 +193,20 @@ private fun HuaweiWarningCard(scheduler: ReminderScheduler) {
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error
             )
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             Text(
                 text = "Для надежной работы напоминаний:\n\n" +
-                       "1. Нажмите кнопку ниже\n" +
-                       "2. Найдите ECounter → включите «Автозапуск»\n" +
-                       "3. Настройки → Батарея → Запуск приложений → ECounter → «Управление вручную» → ВСЕ галочки ✅",
+                        "1. Нажмите кнопку ниже\n" +
+                        "2. Найдите ECounter → включите «Автозапуск»\n" +
+                        "3. Настройки → Батарея → Запуск приложений → ECounter → «Управление вручную» → ВСЕ галочки ✅",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onErrorContainer
             )
-            
+
             Spacer(modifier = Modifier.height(12.dp))
-            
+
             Button(
                 onClick = { scheduler.openHuaweiSettings() },
                 modifier = Modifier.fillMaxWidth(),

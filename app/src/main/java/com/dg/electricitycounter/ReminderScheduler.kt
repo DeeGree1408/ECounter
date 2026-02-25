@@ -8,6 +8,10 @@ import android.os.Build
 import android.provider.Settings
 import android.util.Log
 import java.util.*
+import android.widget.Toast
+import java.text.SimpleDateFormat
+import java.util.Locale
+
 
 class ReminderScheduler(private val context: Context) {
 
@@ -293,4 +297,43 @@ class ReminderScheduler(private val context: Context) {
             null
         }
     }
+    /**
+     * 🧪 ТЕСТОВЫЙ МЕТОД: Установить будильник через N минут
+     * Для проверки работы уведомлений
+     */
+    fun scheduleTestAlarm(minutesFromNow: Int) {
+        Log.d(TAG, "🧪=== scheduleTestAlarm START ===")
+        Log.d(TAG, "🧪 Будильник через $minutesFromNow минут")
+
+        if (!canScheduleExactAlarms()) {
+            Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
+            Toast.makeText(context, "❌ Нет разрешения на точные будильники", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = System.currentTimeMillis()
+            add(Calendar.MINUTE, minutesFromNow)
+        }
+
+        val triggerTime = calendar.timeInMillis
+        val pendingIntent = createPendingIntent()
+
+        if (isHuaweiDevice()) {
+            Log.d(TAG, "🧪 Huawei - используем setAlarmClock()")
+            scheduleWithAlarmClock(triggerTime, pendingIntent)
+        } else {
+            Log.d(TAG, "🧪 Обычное устройство - используем setExactAndAllowWhileIdle()")
+            scheduleWithExactAlarm(triggerTime, pendingIntent)
+        }
+
+        val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        val message = "🧪 Тестовый будильник установлен на ${dateFormat.format(calendar.time)}"
+
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+
+        Log.d(TAG, "✅ Тестовый будильник на: ${calendar.time}")
+        Log.d(TAG, "🧪=== scheduleTestAlarm END ===")
+    }
+
 }
