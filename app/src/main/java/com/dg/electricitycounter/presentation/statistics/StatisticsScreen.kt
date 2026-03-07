@@ -373,7 +373,7 @@ fun ForecastCard(forecast: Forecast) {
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "ℹ️ На основе среднего за 3 месяца",
+                text = "ℹ️ На основе прошлогодних данных (с 2021 года)",
                 fontSize = 11.sp,
                 color = Color.Gray
             )
