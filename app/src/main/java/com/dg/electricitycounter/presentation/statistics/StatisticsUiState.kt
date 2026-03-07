@@ -4,6 +4,8 @@ import com.dg.electricitycounter.domain.model.Reading
 
 data class StatisticsUiState(
     val selectedPeriod: Period = Period.SIX_MONTHS,
+    val selectedYear: Int? = null,  // Выбранный год для отображения
+    val availableYears: List<Int> = emptyList(),  // Список доступных годов с данными
     val readings: List<Reading> = emptyList(),
     val stats: PeriodStats? = null,
     val forecast: Forecast? = null,
@@ -16,7 +18,7 @@ enum class Period {
     THREE_MONTHS,
     SIX_MONTHS,
     TWELVE_MONTHS,
-    LAST_YEAR,
+    SPECIFIC_YEAR,  // Новый тип: конкретный год
     ALL
 }
 

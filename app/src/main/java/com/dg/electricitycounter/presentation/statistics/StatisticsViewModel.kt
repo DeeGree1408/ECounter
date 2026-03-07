@@ -31,18 +31,58 @@ class StatisticsViewModel @Inject constructor(
 
     init {
         loadStatistics(Period.SIX_MONTHS)
+        loadAvailableYears()
     }
 
     fun onPeriodSelected(period: Period) {
-        _uiState.update { it.copy(selectedPeriod = period) }
+        _uiState.update { it.copy(selectedPeriod = period, selectedYear = null) }
         loadStatistics(period)
     }
 
-    private fun loadStatistics(period: Period) {
+    fun selectYear(year: Int) {
+        _uiState.update {
+            it.copy(
+                selectedPeriod = Period.SPECIFIC_YEAR,
+                selectedYear = year
+            )
+        }
+        loadStatistics(Period.SPECIFIC_YEAR, year)
+    }
+
+    private fun loadAvailableYears() {
+        viewModelScope.launch {
+            getStatisticsUseCase(Period.ALL)
+                .catch { }
+                .collect { allReadings ->
+                    val years = getAvailableYears(allReadings)
+                    _uiState.update { it.copy(availableYears = years) }
+                }
+        }
+    }
+
+    private fun getAvailableYears(readings: List<Reading>): List<Int> {
+        return readings.map { reading ->
+            val calendar = Calendar.getInstance()
+            calendar.timeInMillis = reading.date
+            val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+            // Применяем ту же логику: если день < 15, показания за предыдущий месяц
+            if (day < 15) {
+                calendar.add(Calendar.MONTH, -1)
+            }
+
+            calendar.get(Calendar.YEAR)
+        }.distinct().sortedDescending()
+    }
+
+    private fun loadStatistics(period: Period, specificYear: Int? = null) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
 
-            getStatisticsUseCase(period)
+            // Для конкретного года загружаем все данные, а потом фильтруем
+            val periodToLoad = if (period == Period.SPECIFIC_YEAR) Period.ALL else period
+
+            getStatisticsUseCase(periodToLoad)
                 .catch { e ->
                     _uiState.update {
                         it.copy(
@@ -52,18 +92,37 @@ class StatisticsViewModel @Inject constructor(
                     }
                 }
                 .collect { readings ->
-                    val stats = calculateStats(readings)
+                    // Фильтруем по выбранному году, если нужно
+                    val filteredReadings = if (period == Period.SPECIFIC_YEAR && specificYear != null) {
+                        readings.filter { reading ->
+                            val calendar = Calendar.getInstance()
+                            calendar.timeInMillis = reading.date
+                            val day = calendar.get(Calendar.DAY_OF_MONTH)
+
+                            // Применяем логику сдвига месяца ПЕРЕД проверкой года
+                            if (day < 15) {
+                                calendar.add(Calendar.MONTH, -1)
+                            }
+
+                            val readingYear = calendar.get(Calendar.YEAR)
+                            readingYear == specificYear
+                        }
+                    } else {
+                        readings
+                    }
+
+                    val stats = calculateStats(filteredReadings, period)
                     val currentTariff = preferencesHelper.getTariff().toDoubleOrNull() ?: 6.84
 
                     val forecast = if (period == Period.THREE_MONTHS || period == Period.SIX_MONTHS || period == Period.TWELVE_MONTHS) {
-                        calculateForecastUseCase(readings, currentTariff)
+                        calculateForecastUseCase(filteredReadings, currentTariff)
                     } else {
                         null
                     }
 
                     _uiState.update {
                         it.copy(
-                            readings = readings,
+                            readings = filteredReadings,
                             stats = stats,
                             forecast = forecast,
                             isLoading = false,
@@ -88,7 +147,7 @@ class StatisticsViewModel @Inject constructor(
         }
     }
 
-    private fun calculateStats(readings: List<Reading>): PeriodStats {
+    private fun calculateStats(readings: List<Reading>, period: Period): PeriodStats {
         if (readings.isEmpty()) {
             return PeriodStats(
                 totalPaid = 0.0,
@@ -117,10 +176,14 @@ class StatisticsViewModel @Inject constructor(
                 calendar.add(Calendar.MONTH, -1)
             }
 
-            val monthName = SimpleDateFormat("LLL", Locale("ru")).format(calendar.time)
-                .replaceFirstChar { it.uppercase() }
-                .take(3)
-
+            // Для периода ALL - показываем только год
+            val monthName = if (period == Period.ALL) {
+                calendar.get(Calendar.YEAR).toString()
+            } else {
+                SimpleDateFormat("LLL", Locale("ru")).format(calendar.time)
+                    .replaceFirstChar { it.uppercase() }
+                    .take(3)
+            }
 
             MonthData(
                 month = monthName,

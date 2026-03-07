@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -54,20 +55,28 @@ fun StatisticsScreen(
             // КНОПКИ ПЕРИОДОВ
             PeriodSelector(
                 selectedPeriod = uiState.selectedPeriod,
-                onPeriodSelected = viewModel::onPeriodSelected
+                selectedYear = uiState.selectedYear,
+                availableYears = uiState.availableYears,
+                onPeriodSelected = viewModel::onPeriodSelected,
+                onYearSelected = viewModel::selectYear
             )
 
             // ГРАФИК
             if (uiState.stats != null && uiState.stats!!.monthlyData.isNotEmpty()) {
                 BarChartCard(
                     monthlyData = uiState.stats!!.monthlyData,
-                    average = uiState.stats!!.averageConsumption
+                    average = uiState.stats!!.averageConsumption,
+                    period = uiState.selectedPeriod
                 )
             }
 
             // ИТОГИ
             if (uiState.stats != null) {
-                SummaryCard(stats = uiState.stats!!, period = uiState.selectedPeriod)
+                SummaryCard(
+                    stats = uiState.stats!!,
+                    period = uiState.selectedPeriod,
+                    selectedYear = uiState.selectedYear
+                )
             }
 
             // ПРОГНОЗ
@@ -97,9 +106,12 @@ fun StatisticsScreen(
 @Composable
 fun PeriodSelector(
     selectedPeriod: Period,
-    onPeriodSelected: (Period) -> Unit
+    selectedYear: Int?,
+    availableYears: List<Int>,
+    onPeriodSelected: (Period) -> Unit,
+    onYearSelected: (Int) -> Unit
 ) {
-    val lastYear = Calendar.getInstance().get(Calendar.YEAR) - 1
+    var expandedYearMenu by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -121,7 +133,46 @@ fun PeriodSelector(
                 PeriodButton("3\nмес", Period.THREE_MONTHS, selectedPeriod, onPeriodSelected, Modifier.weight(1f))
                 PeriodButton("6\nмес", Period.SIX_MONTHS, selectedPeriod, onPeriodSelected, Modifier.weight(1f))
                 PeriodButton("12\nмес", Period.TWELVE_MONTHS, selectedPeriod, onPeriodSelected, Modifier.weight(1f))
-                PeriodButton("$lastYear\nгод", Period.LAST_YEAR, selectedPeriod, onPeriodSelected, Modifier.weight(1f))
+
+                // Кнопка выбора года с DropdownMenu
+                Box(modifier = Modifier.weight(1f)) {
+                    val buttonText = if (selectedYear != null && selectedPeriod == Period.SPECIFIC_YEAR) {
+                        "$selectedYear\nгод"
+                    } else {
+                        "Год\n▼"
+                    }
+
+                    Button(
+                        onClick = { expandedYearMenu = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(50.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (selectedPeriod == Period.SPECIFIC_YEAR) Color(0xFF1E3C72) else Color(0xFFE0E0E0),
+                            contentColor = if (selectedPeriod == Period.SPECIFIC_YEAR) Color.White else Color.Black
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(4.dp)
+                    ) {
+                        Text(buttonText, fontSize = 11.sp, lineHeight = 13.sp, textAlign = TextAlign.Center)
+                    }
+
+                    DropdownMenu(
+                        expanded = expandedYearMenu,
+                        onDismissRequest = { expandedYearMenu = false }
+                    ) {
+                        availableYears.forEach { year ->
+                            DropdownMenuItem(
+                                text = { Text("$year год") },
+                                onClick = {
+                                    onYearSelected(year)
+                                    expandedYearMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+
                 PeriodButton("Все", Period.ALL, selectedPeriod, onPeriodSelected, Modifier.weight(1f))
             }
         }
@@ -151,7 +202,11 @@ fun PeriodButton(
 }
 
 @Composable
-fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
+fun BarChartCard(
+    monthlyData: List<MonthData>,
+    average: Double,
+    period: Period
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(4.dp),
@@ -167,7 +222,11 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
             )
 
             // График БЕЗ padding по бокам
-            BarChart(data = monthlyData, average = average)
+            BarChart(
+                data = monthlyData,
+                average = average,
+                period = period
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -175,8 +234,7 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                 horizontalArrangement = Arrangement.Center
             ) {
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
                             .size(16.dp)
@@ -203,12 +261,17 @@ fun BarChartCard(monthlyData: List<MonthData>, average: Double) {
 @Composable
 fun BarChart(
     data: List<MonthData>,
-    average: Double
+    average: Double,
+    period: Period
 ) {
     if (data.isEmpty()) return
 
     val maxValue = data.maxOfOrNull { it.consumption } ?: 1.0
     val fontSize = if (data.size >= 12) 8.sp else if (data.size > 6) 10.sp else 12.sp
+
+    // Определяем, показывать ли подписи
+    val showConsumptionValues = period != Period.ALL
+    val showMonthNames = period != Period.ALL
 
     Column {
         // Подпись среднего
@@ -223,24 +286,24 @@ fun BarChart(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Значения НАД столбцами
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-
-        data.forEach { monthData ->
-                Text(
-                    text = "${monthData.consumption.toInt()}",
-                    fontSize = fontSize,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
+        // Значения НАД столбцами (для всех, кроме ALL)
+        if (showConsumptionValues) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                data.forEach { monthData ->
+                    Text(
+                        text = "${monthData.consumption.toInt()}",
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
+            Spacer(modifier = Modifier.height(4.dp))
         }
-
-        Spacer(modifier = Modifier.height(4.dp))
 
         // ГРАФИК
         Canvas(
@@ -248,8 +311,7 @@ fun BarChart(
                 .fillMaxWidth()
                 .height(220.dp)
         ) {
-
-        val spacing = 4.dp.toPx()
+            val spacing = 4.dp.toPx()
             val barWidth = (size.width - spacing * (data.size + 1)) / data.size
             val chartHeight = size.height
 
@@ -281,37 +343,97 @@ fun BarChart(
                     size = androidx.compose.ui.geometry.Size(barWidth, barHeight)
                 )
             }
+
+            // Разделители годов и подписи (только для ALL)
+            if (period == Period.ALL) {
+                // Группируем данные по годам
+                val yearGroups = mutableListOf<Pair<String, Int>>() // год -> количество месяцев
+                var currentYear = data.firstOrNull()?.month ?: ""
+                var count = 0
+
+                data.forEach { monthData ->
+                    if (monthData.month == currentYear) {
+                        count++
+                    } else {
+                        yearGroups.add(Pair(currentYear, count))
+                        currentYear = monthData.month
+                        count = 1
+                    }
+                }
+                yearGroups.add(Pair(currentYear, count))
+
+                // Рисуем разделители и подписи
+                var currentIndex = 0
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.DKGRAY
+                    textSize = 36f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isFakeBoldText = true
+                }
+
+                yearGroups.forEach { (year, monthCount) ->
+                    // Рисуем разделитель в начале года (только если >= 6 месяцев)
+                    // Метка идёт вниз от оси X на 15 пикселей
+                    if (monthCount >= 6 && currentIndex > 0) {
+                        val xLine = spacing + currentIndex * (barWidth + spacing) - spacing / 2
+                        drawLine(
+                            color = Color.DarkGray,
+                            start = Offset(xLine, chartHeight),
+                            end = Offset(xLine, chartHeight + 15.dp.toPx()),
+                            strokeWidth = 2.dp.toPx()
+                        )
+                    }
+
+                    // Рисуем подпись года в центре (только если >= 6 месяцев)
+                    if (monthCount >= 6) {
+                        val centerX = spacing + (currentIndex + monthCount / 2f) * (barWidth + spacing)
+                        drawContext.canvas.nativeCanvas.drawText(
+                            year,
+                            centerX,
+                            chartHeight + 40f,
+                            paint
+                        )
+                    }
+
+                    currentIndex += monthCount
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(if (period == Period.ALL) 50.dp else 12.dp))
 
-        // НАЗВАНИЯ МЕСЯЦЕВ
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-
-        data.forEach { monthData ->
-                Text(
-                    text = monthData.month,
-                    fontSize = if (data.size >= 12) 10.sp else 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.Black,
-                    modifier = Modifier.weight(1f),
-                    textAlign = TextAlign.Center
-                )
+        // НАЗВАНИЯ МЕСЯЦЕВ (только для НЕ ALL периодов)
+        if (showMonthNames) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                data.forEach { monthData ->
+                    Text(
+                        text = monthData.month,
+                        fontSize = if (data.size >= 12) 10.sp else 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Black,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun SummaryCard(stats: PeriodStats, period: Period) {
+fun SummaryCard(
+    stats: PeriodStats,
+    period: Period,
+    selectedYear: Int?
+) {
     val periodName = when (period) {
         Period.THREE_MONTHS -> "3 МЕСЯЦА"
         Period.SIX_MONTHS -> "6 МЕСЯЦЕВ"
         Period.TWELVE_MONTHS -> "12 МЕСЯЦЕВ"
-        Period.LAST_YEAR -> "${Calendar.getInstance().get(Calendar.YEAR) - 1} ГОД"
+        Period.SPECIFIC_YEAR -> "${selectedYear ?: ""} ГОД"
         Period.ALL -> "ВСЁ ВРЕМЯ"
     }
 
@@ -373,7 +495,7 @@ fun ForecastCard(forecast: Forecast) {
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "ℹ️ На основе прошлогодних данных (с 2021 года)",
+                text = "ℹ️ На основе данных с 2021 года",
                 fontSize = 11.sp,
                 color = Color.Gray
             )
