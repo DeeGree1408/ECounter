@@ -55,8 +55,8 @@ fun HistoryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("🕒 ИСТОРИЯ", fontSize = 16.sp, fontWeight = FontWeight.Medium)
+                title = { 
+                    Text("📊 ИСТОРИЯ РАСЧЁТОВ", fontSize = 16.sp)
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
@@ -64,30 +64,29 @@ fun HistoryScreen(
                     }
                 },
                 actions = {
-                    Button(
-                        onClick = onNavigateToStatistics,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF1E3C72)
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier
-                            .height(36.dp)
-                            .padding(end = 4.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)
-                    ) {
+                    // Кнопка Статистика
+                    IconButton(onClick = onNavigateToStatistics) {
                         Icon(
                             Icons.Default.BarChart,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "СТАТИСТИКА",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Medium
+                            contentDescription = "Статистика",
+                            tint = Color(0xFF1E3C72)
                         )
                     }
+
+                    // Кнопка Удалить
+                    if (uiState.readings.isNotEmpty()) {
+                        IconButton(
+                            onClick = viewModel::showDeleteDialog
+                        ) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Удалить последнюю запись",
+                                tint = Color.Red
+                            )
+                        }
+                    }
                 }
+
             )
         }
     ) { paddingValues ->
@@ -111,7 +110,7 @@ fun HistoryScreen(
                     containerColor = Color(0xFF1E3C72)
                 )
             ) {
-                Text("<-- ВЕРНУТЬСЯ", fontSize = 12.sp)
+                Text("← ВЕРНУТЬСЯ", fontSize = 12.sp)
             }
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -134,9 +133,7 @@ fun HistoryScreen(
                     itemsIndexed(uiState.readings) { index, reading ->
                         HistoryCard(
                             reading = reading,
-                            isLatest = index == 0,
-                            onDeleteClick = if (index == 0) viewModel::showDeleteDialog else null
-                            // Передаём колбэк для удаления только для последней записи
+                            isLatest = index == 0
                         )
                     }
                 }
@@ -268,8 +265,7 @@ fun EmptyHistoryCard() {
 @Composable
 fun HistoryCard(
     reading: Reading,
-    isLatest: Boolean,
-    onDeleteClick: (() -> Unit)? = null  // Добавляем параметр для колбэка удаления
+    isLatest: Boolean
 ) {
     val context = LocalContext.current
     
@@ -289,7 +285,6 @@ fun HistoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Левая часть - дата
                 Text(
                     text = if (isLatest) "📅 ${reading.date.formatToDisplay()} ⭐" else "📅 ${reading.date.formatToDisplay()}",
                     fontWeight = FontWeight.Bold,
@@ -297,34 +292,13 @@ fun HistoryCard(
                     color = if (isLatest) Color(0xFFDC3545) else Color(0xFF1E3C72)
                 )
                 
-                // Правая часть - метка "ПОСЛЕДНЯЯ" и иконка удаления
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (isLatest) {
-                        Text(
-                            text = "УДАЛИТЬ ЗАПИСЬ",
-                            fontSize = 10.sp,
-                            color = Color.Red,
-                            fontWeight = FontWeight.Bold
-                        )
-                        
-                        // Иконка удаления на последней карточке
-                        if (onDeleteClick != null) {
-                            IconButton(
-                                onClick = onDeleteClick,
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Удалить последнюю запись",
-                                    tint = Color.Red,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                    }
+                if (isLatest) {
+                    Text(
+                        text = "ПОСЛЕДНЯЯ",
+                        fontSize = 10.sp,
+                        color = Color.Red,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
             
