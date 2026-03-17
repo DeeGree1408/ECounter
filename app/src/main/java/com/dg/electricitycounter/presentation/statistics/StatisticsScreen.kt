@@ -372,9 +372,9 @@ fun BarChart(
                 }
 
                 yearGroups.forEach { (year, monthCount) ->
-                    // Рисуем разделитель в начале года (только если >= 6 месяцев)
+                    // Рисуем разделитель в начале КАЖДОГО года (кроме самого первого)
                     // Метка идёт вниз от оси X на 15 пикселей
-                    if (monthCount >= 6 && currentIndex > 0) {
+                    if (currentIndex > 0) {
                         val xLine = spacing + currentIndex * (barWidth + spacing) - spacing / 2
                         drawLine(
                             color = Color.DarkGray,
@@ -495,7 +495,7 @@ fun ForecastCard(forecast: Forecast) {
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "ℹ️ На основе данных с 2021 года",
+                text = "ℹ️ На основе прошлогодних данных (с 2021 года)",
                 fontSize = 11.sp,
                 color = Color.Gray
             )
