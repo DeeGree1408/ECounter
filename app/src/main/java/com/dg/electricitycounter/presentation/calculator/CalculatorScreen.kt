@@ -24,6 +24,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @Composable
 fun CalculatorScreen(
@@ -219,7 +221,8 @@ fun CalculatorScreen(
                                 onValueChange = viewModel::onCurrentReadingChange,
                                 modifier = Modifier.fillMaxWidth(),
                                 placeholder = { Text("Введите показания", fontSize = 14.sp) },
-                                singleLine = true
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)  // ← ДОБАВЬ ЭТУ СТРОКУ
                             )
                         }
                     }
