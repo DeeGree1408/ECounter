@@ -25,23 +25,47 @@ class GetStatisticsUseCase @Inject constructor(
     private fun filterByPeriod(readings: List<Reading>, period: Period): List<Reading> {
         if (period == Period.ALL || period == Period.SPECIFIC_YEAR) return readings
 
-        val calendar = Calendar.getInstance()
+        val currentCalendar = Calendar.getInstance()
+        val currentMonth = currentCalendar.get(Calendar.MONTH)  // 0-11
+        val currentYear = currentCalendar.get(Calendar.YEAR)
 
-        return when (period) {
-            Period.THREE_MONTHS -> {
-                calendar.add(Calendar.MONTH, -3)
-                readings.filter { it.date >= calendar.timeInMillis }
+        // Вычисляем начальный месяц для фильтрации
+        val monthsToSubtract = when (period) {
+            Period.THREE_MONTHS -> 2  // Текущий + 2 предыдущих = 3 месяца
+            Period.SIX_MONTHS -> 5    // Текущий + 5 предыдущих = 6 месяцев
+            Period.TWELVE_MONTHS -> 11 // Текущий + 11 предыдущих = 12 месяцев
+            else -> 0
+        }
+
+        val startCalendar = Calendar.getInstance()
+        startCalendar.set(Calendar.YEAR, currentYear)
+        startCalendar.set(Calendar.MONTH, currentMonth)
+        startCalendar.add(Calendar.MONTH, -monthsToSubtract)
+
+        val startMonth = startCalendar.get(Calendar.MONTH)
+        val startYear = startCalendar.get(Calendar.YEAR)
+
+        return readings.filter { reading ->
+            val readingCalendar = Calendar.getInstance()
+            readingCalendar.timeInMillis = reading.date
+            val day = readingCalendar.get(Calendar.DAY_OF_MONTH)
+
+            // Применяем логику: день < 15 = предыдущий месяц
+            if (day < 15) {
+                readingCalendar.add(Calendar.MONTH, -1)
             }
-            Period.SIX_MONTHS -> {
-                calendar.add(Calendar.MONTH, -6)
-                readings.filter { it.date >= calendar.timeInMillis }
+
+            val readingMonth = readingCalendar.get(Calendar.MONTH)
+            val readingYear = readingCalendar.get(Calendar.YEAR)
+
+            // Фильтр: запись входит в диапазон?
+            when {
+                readingYear > currentYear -> false  // Будущее - исключаем
+                readingYear < startYear -> false    // Слишком старое - исключаем
+                readingYear == currentYear && readingMonth > currentMonth -> false  // Будущий месяц текущего года
+                readingYear == startYear && readingMonth < startMonth -> false  // До начального месяца
+                else -> true  // Попадает в диапазон
             }
-            Period.TWELVE_MONTHS -> {
-                calendar.add(Calendar.MONTH, -12)
-                readings.filter { it.date >= calendar.timeInMillis }
-            }
-            Period.SPECIFIC_YEAR -> readings  // Фильтрация происходит в ViewModel
-            Period.ALL -> readings
         }
     }
 }
