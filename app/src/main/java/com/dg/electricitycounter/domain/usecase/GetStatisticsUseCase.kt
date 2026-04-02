@@ -48,12 +48,6 @@ class GetStatisticsUseCase @Inject constructor(
         return readings.filter { reading ->
             val readingCalendar = Calendar.getInstance()
             readingCalendar.timeInMillis = reading.date
-            val day = readingCalendar.get(Calendar.DAY_OF_MONTH)
-
-            // Применяем логику: день < 15 = предыдущий месяц
-            if (day < 15) {
-                readingCalendar.add(Calendar.MONTH, -1)
-            }
 
             val readingMonth = readingCalendar.get(Calendar.MONTH)
             val readingYear = readingCalendar.get(Calendar.YEAR)

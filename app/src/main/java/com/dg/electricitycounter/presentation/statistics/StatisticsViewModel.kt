@@ -64,13 +64,6 @@ class StatisticsViewModel @Inject constructor(
         return readings.map { reading ->
             val calendar = Calendar.getInstance()
             calendar.timeInMillis = reading.date
-            val day = calendar.get(Calendar.DAY_OF_MONTH)
-
-            // Применяем ту же логику: если день < 15, показания за предыдущий месяц
-            if (day < 15) {
-                calendar.add(Calendar.MONTH, -1)
-            }
-
             calendar.get(Calendar.YEAR)
         }.distinct().sortedDescending()
     }
@@ -97,13 +90,6 @@ class StatisticsViewModel @Inject constructor(
                         readings.filter { reading ->
                             val calendar = Calendar.getInstance()
                             calendar.timeInMillis = reading.date
-                            val day = calendar.get(Calendar.DAY_OF_MONTH)
-
-                            // Применяем логику сдвига месяца ПЕРЕД проверкой года
-                            if (day < 15) {
-                                calendar.add(Calendar.MONTH, -1)
-                            }
-
                             val readingYear = calendar.get(Calendar.YEAR)
                             readingYear == specificYear
                         }
@@ -166,15 +152,8 @@ class StatisticsViewModel @Inject constructor(
         val maxConsumption: Double = readings.maxOf { it.consumption }
 
         val monthlyData = readings.map { reading ->
-            val calendar = Calendar.getInstance().apply {
-                timeInMillis = reading.date
-            }
-            val day = calendar.get(Calendar.DAY_OF_MONTH)
-
-            // Если передано в начале месяца (до 15) - это за ПРЕДЫДУЩИЙ месяц
-            if (day < 15) {
-                calendar.add(Calendar.MONTH, -1)
-            }
+            val calendar = Calendar.getInstance()
+            calendar.timeInMillis = reading.date
 
             // Для периода ALL - показываем только год
             val monthName = if (period == Period.ALL) {

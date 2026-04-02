@@ -17,16 +17,34 @@ class AddReadingUseCase @Inject constructor(
         try {
             val consumption = current - previous
             val amount = consumption * tariff
-            
+
+            // Определяем месяц показаний
+            val today = java.util.Calendar.getInstance()
+            val dayOfMonth = today.get(java.util.Calendar.DAY_OF_MONTH)
+
+// Если день < 15, то показания за предыдущий месяц
+            val readingMonth = if (dayOfMonth < 15) {
+                today.apply { add(java.util.Calendar.MONTH, -1) }
+            } else {
+                today
+            }
+
+// Устанавливаем последний день месяца показаний
+            readingMonth.set(java.util.Calendar.DAY_OF_MONTH, readingMonth.getActualMaximum(java.util.Calendar.DAY_OF_MONTH))
+            readingMonth.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            readingMonth.set(java.util.Calendar.MINUTE, 0)
+            readingMonth.set(java.util.Calendar.SECOND, 0)
+            readingMonth.set(java.util.Calendar.MILLISECOND, 0)
+
             val reading = Reading(
-                date = System.currentTimeMillis(),
+                date = readingMonth.timeInMillis,  // ← последний день месяца показаний
                 previousReading = previous,
                 currentReading = current,
                 consumption = consumption,
                 tariff = tariff,
                 amount = amount
             )
-            
+
             repository.addReading(reading)
             emit(Result.success(reading))
             
