@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.em
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dg.electricitycounter.domain.model.Reading
@@ -35,14 +36,14 @@ fun HistoryScreen(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    
+
     // Показываем ошибки через Toast
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
         }
     }
-    
+
     // Диалог удаления
     if (uiState.showDeleteDialog && uiState.readings.isNotEmpty()) {
         DeleteConfirmationDialog(
@@ -51,7 +52,7 @@ fun HistoryScreen(
             onDismiss = viewModel::hideDeleteDialog
         )
     }
-    
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -100,7 +101,7 @@ fun HistoryScreen(
             // СТАТИСТИКА
             val stats = uiState.readings.toStats()
             StatisticsCard(stats)
-            
+
             Spacer(modifier = Modifier.height(8.dp))
 
             // КНОПКА НАЗАД
@@ -113,9 +114,9 @@ fun HistoryScreen(
             ) {
                 Text("<-- ВЕРНУТЬСЯ", fontSize = 12.sp)
             }
-            
+
             Spacer(modifier = Modifier.height(8.dp))
-            
+
             // СПИСОК ИСТОРИИ
             if (uiState.isLoading) {
                 Box(
@@ -136,7 +137,6 @@ fun HistoryScreen(
                             reading = reading,
                             isLatest = index == 0,
                             onDeleteClick = if (index == 0) viewModel::showDeleteDialog else null
-                            // Передаём колбэк для удаления только для последней записи
                         )
                     }
                 }
@@ -149,79 +149,62 @@ fun HistoryScreen(
 fun StatisticsCard(stats: HistoryStats) {
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFE7F3FF)
-        ),
-        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFE7F3FF)),
+        elevation = CardDefaults.cardElevation(4.dp),
         shape = RoundedCornerShape(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
+        Column(modifier = Modifier.padding(10.dp)) {  // Ещё меньше
             // Заголовок
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Text(
+                text = "📊 ИТОГИ ЗА ВСЁ ВРЕМЯ",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО! Сжимает высоту строки
+                color = Color(0xFF1E3C72)
+            )
+
+            // Период данных (БЕЗ Spacer!)
+            if (stats.firstDate.isNotEmpty() && stats.lastDate.isNotEmpty()) {
                 Text(
-                    text = "📈 СТАТИСТИКА",
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF1E3C72),
-                    fontSize = 16.sp
-                )
-                Text(
-                    text = "6,84 ₽/кВт·ч",
+                    text = "🗓️ с ${stats.firstDate} по ${stats.lastDate} (${stats.monthsCount} месяцев)",
                     fontSize = 12.sp,
-                    color = Color(0xFF1E3C72),
-                    fontWeight = FontWeight.Medium
+                    lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
+                    color = Color.Gray,
+                    modifier = Modifier.padding(top = 2.dp)  // Минимальный отступ
                 )
             }
 
-            // Первая строка
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                StatItem("${String.format("%.2f", stats.totalPaid)} ₽", "Оплачено")
-                StatItem("${String.format("%.0f", stats.totalConsumption)}", "Всего кВт·ч")
-                StatItem("${stats.recordsCount}", "Расчётов")
-            }
+            Spacer(modifier = Modifier.height(6.dp))  // Только перед списком
 
-            // Вторая строка
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                StatItem(
-                    "${String.format("%.0f", stats.averageConsumption)} кВт·ч",
-                    "В среднем в месяц"
-                )
-                StatItem(
-                    "${String.format("%.0f", stats.averagePerYear)} кВт·ч",
-                    "В среднем в год"
-                )
-            }
+            // Статистика (ВООБЩЕ БЕЗ vertical padding!)
+            StatRow("📝 Записей:", "${stats.recordsCount}")
+            StatRow("💰 Оплачено:", "${String.format("%.2f", stats.totalPaid)} ₽")
+            StatRow("⚡ Израсходовано:", "${String.format("%.0f", stats.totalConsumption)} кВт·ч")
+            StatRow("🔄 В среднем/месяц:", "${String.format("%.0f", stats.averageConsumption)} кВт·ч")
+            StatRow("🎯 В среднем/год:", "${String.format("%.0f", stats.averagePerYear)} кВт·ч")
+            StatRow("📉 Мин. расход:", "${String.format("%.0f", stats.minConsumption)} кВт·ч")
+            StatRow("📈 Макс. расход:", "${String.format("%.0f", stats.maxConsumption)} кВт·ч")
         }
     }
 }
 
 @Composable
-fun StatItem(value: String, label: String) {
-    Column(
-        horizontalAlignment = Alignment.Start,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
+fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),  // 🔥 УБРАЛ padding(vertical)!
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Text(
             text = label,
-            fontSize = 11.sp,
-            color = Color.Gray
+            fontSize = 14.sp,
+            lineHeight = 1.4.em,  // 🔥 ДОБАВЛЕНО! Сжимает текст
+            color = Color(0xFF333333)
         )
         Text(
             text = value,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.SemiBold,
+            fontSize = 14.sp,
+            lineHeight = 1.4.em,  // 🔥 ДОБАВЛЕНО!
+            fontWeight = FontWeight.Medium,
             color = Color(0xFF1E3C72)
         )
     }
@@ -269,10 +252,10 @@ fun EmptyHistoryCard() {
 fun HistoryCard(
     reading: Reading,
     isLatest: Boolean,
-    onDeleteClick: (() -> Unit)? = null  // Добавляем параметр для колбэка удаления
+    onDeleteClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
-    
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(2.dp),
@@ -281,7 +264,7 @@ fun HistoryCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp)
+                .padding(8.dp)  // Уменьшено с 10dp
         ) {
             // ЗАГОЛОВОК
             Row(
@@ -289,15 +272,14 @@ fun HistoryCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Левая часть - дата
                 Text(
                     text = if (isLatest) "📅 ${reading.date.formatToDisplay()} ⭐" else "📅 ${reading.date.formatToDisplay()}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
+                    lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
                     color = if (isLatest) Color(0xFFDC3545) else Color(0xFF1E3C72)
                 )
-                
-                // Правая часть - метка "ПОСЛЕДНЯЯ" и иконка удаления
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -306,11 +288,11 @@ fun HistoryCard(
                         Text(
                             text = "УДАЛИТЬ ЗАПИСЬ",
                             fontSize = 10.sp,
+                            lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                             color = Color.Red,
                             fontWeight = FontWeight.Bold
                         )
-                        
-                        // Иконка удаления на последней карточке
+
                         if (onDeleteClick != null) {
                             IconButton(
                                 onClick = onDeleteClick,
@@ -327,9 +309,9 @@ fun HistoryCard(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.height(4.dp))
-            
+
             // ОСНОВНАЯ ИНФОРМАЦИЯ
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -339,32 +321,36 @@ fun HistoryCard(
                     Text(
                         text = "ПОКАЗАНИЯ",
                         fontSize = 10.sp,
+                        lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                         color = Color.Gray
                     )
                     Text(
                         text = "${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}",
                         fontSize = 16.sp,
+                        lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
                         fontWeight = FontWeight.Bold
                     )
                 }
-                
+
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "РАСХОД",
                         fontSize = 10.sp,
+                        lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                         color = Color.Gray
                     )
                     Text(
                         text = "${String.format("%.0f", reading.consumption)} кВт·ч",
                         fontSize = 16.sp,
+                        lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFF28A745)
                     )
                 }
             }
-            
-            Spacer(modifier = Modifier.height(6.dp))
-            
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             // ДЕТАЛИ
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -374,35 +360,39 @@ fun HistoryCard(
                     Text(
                         text = "ТАРИФ",
                         fontSize = 10.sp,
+                        lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                         color = Color.Gray
                     )
                     Text(
                         text = "${String.format("%.2f", reading.tariff)} ₽",
-                        fontSize = 12.sp
+                        fontSize = 12.sp,
+                        lineHeight = 1.3.em  // 🔥 ДОБАВЛЕНО!
                     )
                 }
-                
+
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
                         text = "СУММА",
                         fontSize = 10.sp,
+                        lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                         color = Color.Gray
                     )
                     Text(
                         text = "${String.format("%.2f", reading.amount)} ₽",
                         fontSize = 14.sp,
+                        lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
                         fontWeight = FontWeight.Bold,
                         color = Color(0xFFDC3545)
                     )
                 }
             }
-            
+
             // СТРОКА ДЛЯ БАНКА (только для последней записи)
             if (isLatest) {
-                Spacer(modifier = Modifier.height(8.dp))
-                
+                Spacer(modifier = Modifier.height(6.dp))
+
                 val bankString = "Эл-во ${reading.address} - расход ${reading.consumption.toInt()} кВт, показания ${reading.currentReading.toInt()} на ${reading.date.formatToDisplay()}"
-                
+
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = Color(0xFFF8F9FA)
@@ -412,7 +402,7 @@ fun HistoryCard(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(8.dp)
+                            .padding(6.dp)  // Уменьшено с 8dp
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -422,10 +412,11 @@ fun HistoryCard(
                             Text(
                                 text = "📋 ДЛЯ БАНКА",
                                 fontSize = 11.sp,
+                                lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1E3C72)
                             )
-                            
+
                             IconButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -443,20 +434,22 @@ fun HistoryCard(
                                 )
                             }
                         }
-                        
-                        Spacer(modifier = Modifier.height(4.dp))
-                        
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
                         Text(
                             text = bankString,
                             fontSize = 12.sp,
+                            lineHeight = 1.3.em,  // 🔥 ДОБАВЛЕНО!
                             color = Color(0xFF333333)
                         )
-                        
+
                         Spacer(modifier = Modifier.height(2.dp))
-                        
+
                         Text(
                             text = "Нажмите на кнопку справа для копирования",
                             fontSize = 9.sp,
+                            lineHeight = 1.2.em,  // 🔥 ДОБАВЛЕНО!
                             color = Color.Gray
                         )
                     }
