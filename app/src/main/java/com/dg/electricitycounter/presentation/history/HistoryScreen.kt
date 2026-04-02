@@ -180,7 +180,7 @@ fun StatisticsCard(stats: HistoryStats) {
             StatRow("📝 Записей:", "${stats.recordsCount}")
             StatRow("💰 Оплачено:", "${String.format("%.2f", stats.totalPaid)} ₽")
             StatRow("⚡ Израсходовано:", "${String.format("%.0f", stats.totalConsumption)} кВт·ч")
-            StatRow("🔄 В среднем/месяц:", "${String.format("%.0f", stats.averageConsumption)} кВт·ч")
+            StatRow("📊 В среднем/месяц:", "${String.format("%.0f", stats.averageConsumption)} кВт·ч")
             StatRow("🎯 В среднем/год:", "${String.format("%.0f", stats.averagePerYear)} кВт·ч")
             StatRow("📉 Мин. расход:", "${String.format("%.0f", stats.minConsumption)} кВт·ч")
             StatRow("📈 Макс. расход:", "${String.format("%.0f", stats.maxConsumption)} кВт·ч")
