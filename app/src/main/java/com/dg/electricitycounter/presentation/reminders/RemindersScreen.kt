@@ -29,6 +29,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -41,6 +42,21 @@ fun RemindersScreen(
 
     // ✅ СОЗДАЕМ SCHEDULER ОДИН РАЗ
     val scheduler = remember { ReminderScheduler(context) }
+
+    // ✅ ОТДЕЛЬНОЕ СОСТОЯНИЕ ДЛЯ ВРЕМЕНИ БУДИЛЬНИКА
+    var nextAlarmTime by remember { mutableStateOf<Long?>(null) }
+
+    // ✅ ПЕРИОДИЧЕСКИЙ ОПРОС ПЛАНИРОВЩИКА (каждые 2 секунды)
+    LaunchedEffect(uiState.isReminderEnabled, scheduler) {
+        if (uiState.isReminderEnabled) {
+            while (true) {
+                nextAlarmTime = scheduler.getNextAlarmTime()
+                delay(2000)
+            }
+        } else {
+            nextAlarmTime = null
+        }
+    }
 
     // Показываем сообщения
     LaunchedEffect(uiState.error) {
@@ -123,15 +139,12 @@ fun RemindersScreen(
                                 color = Color(0xFF1E3C72)
                             )
 
-                            // ✅ СТАТУС: реальное время из планировщика или "Включено"
+                            // ✅ СТАТУС: реальное время из планировщика (обновляется!)
                             Text(
                                 text = if (uiState.isReminderEnabled) {
-                                    val nextAlarm = scheduler.getNextAlarmTime()
-                                    if (nextAlarm != null) {
-                                        "⏰ ${SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(nextAlarm))}"
-                                    } else {
-                                        "🔔 Включено"
-                                    }
+                                    nextAlarmTime?.let { time ->
+                                        "⏰ ${SimpleDateFormat("dd.MM HH:mm", Locale.getDefault()).format(Date(time))}"
+                                    } ?: "🔔 Включено"
                                 } else {
                                     "🔕 Выключено"
                                 },
