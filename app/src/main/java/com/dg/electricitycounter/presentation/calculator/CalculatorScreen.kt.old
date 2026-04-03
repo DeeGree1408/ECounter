@@ -8,7 +8,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -20,12 +19,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 
 @Composable
 fun CalculatorScreen(
@@ -35,18 +35,20 @@ fun CalculatorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-
+    
+    // 🔧 ПЕРЕЗАГРУЖАЕМ ДАННЫЕ ПРИ КАЖДОМ ПОЯВЛЕНИИ ЭКРАНА
     LaunchedEffect(Unit) {
         viewModel.loadData()
     }
-
+    
+    // Показываем ошибки через Toast
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
             viewModel.clearError()
         }
     }
-
+    
     Scaffold { paddingValues ->
         Box(
             modifier = Modifier
@@ -69,52 +71,93 @@ fun CalculatorScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // ЗАГОЛОВОК
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(text = "⚡", fontSize = 36.sp, color = Color(0xFFFFD700))
-                    Text(text = "ЭЛЕКТРОСЧЁТЧИК", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text(text = "Учёт и расчёт электроэнергии", fontSize = 12.sp, color = Color(0xFFAAAAAA))
+                    Text(
+                        text = "⚡",
+                        fontSize = 36.sp,
+                        color = Color(0xFFFFD700)
+                    )
+                    Text(
+                        text = "ЭЛЕКТРОСЧЁТЧИК",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Учёт и расчёт электроэнергии",
+                        fontSize = 12.sp,
+                        color = Color(0xFFAAAAAA)
+                    )
                 }
 
+                // НАВИГАЦИОННЫЕ КНОПКИ
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
-                    NavigationButton(text = "НАПОМИНАНИЯ", onClick = onNavigateToReminders, color = Color(0xFF2A5298), modifier = Modifier.weight(1f))
-                    NavigationButton(text = "ИСТОРИЯ", onClick = onNavigateToHistory, color = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
+                    NavigationButton(
+                        text = "НАПОМИНАНИЯ",
+                        onClick = onNavigateToReminders,
+                        color = Color(0xFF2A5298),
+                        modifier = Modifier.weight(1f)
+                    )
+
+                    NavigationButton(
+                        text = "ИСТОРИЯ",
+                        onClick = onNavigateToHistory,
+                        color = Color(0xFFFF8C00),
+                        modifier = Modifier.weight(1f)
+                    )
                 }
 
+                // КАРТОЧКА С ПОЛЯМИ ВВОДА
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.White
+                    ),
                     elevation = CardDefaults.cardElevation(6.dp),
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
-                        // ✅ УМЕНЬШАЕМ ОТСТУПЫ МЕЖДУ ПОЛЯМИ (вместо 12.dp → 4.dp)
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         // ТАРИФ
                         Column {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "ТАРИФ (руб/кВт·ч)",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                // ДАТА ИЗМЕНЕНИЯ ТАРИФА
                                 if (uiState.tariffChangeDate.isNotEmpty()) {
-                                    Text(text = "действует с ${uiState.tariffChangeDate}", fontSize = 10.sp, color = Color.Gray)
+                                    Text(
+                                        text = "действует с ${uiState.tariffChangeDate}",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
                                 }
                             }
                             OutlinedTextField(
                                 value = uiState.tariff,
                                 onValueChange = viewModel::onTariffChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height() — поле само подстроится под текст
                                 enabled = !uiState.isTariffLocked,
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 trailingIcon = {
-                                    IconButton(onClick = viewModel::toggleTariffLock, modifier = Modifier.size(20.dp)) {
+                                    IconButton(
+                                        onClick = viewModel::toggleTariffLock,
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
                                         Icon(
                                             if (uiState.isTariffLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                                             contentDescription = "Защита",
@@ -128,20 +171,32 @@ fun CalculatorScreen(
 
                         // ПРЕДЫДУЩИЕ ПОКАЗАНИЯ
                         Column {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(text = uiState.lastReadingDate, fontSize = 10.sp, color = Color.Gray)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = "СТАРЫЕ ПОКАЗАНИЯ, кВт",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = uiState.lastReadingDate,
+                                    fontSize = 10.sp,
+                                    color = Color.Gray
+                                )
                             }
                             OutlinedTextField(
                                 value = uiState.previousReading,
                                 onValueChange = viewModel::onPreviousReadingChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height()
                                 enabled = !uiState.isPreviousLocked,
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 trailingIcon = {
-                                    IconButton(onClick = viewModel::togglePreviousLock, modifier = Modifier.size(20.dp)) {
+                                    IconButton(
+                                        onClick = viewModel::togglePreviousLock,
+                                        modifier = Modifier.size(20.dp)
+                                    ) {
                                         Icon(
                                             if (uiState.isPreviousLocked) Icons.Default.Lock else Icons.Default.LockOpen,
                                             contentDescription = "Защита",
@@ -155,29 +210,38 @@ fun CalculatorScreen(
 
                         // ТЕКУЩИЕ ПОКАЗАНИЯ
                         Column {
-                            Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text(
+                                text = "НОВЫЕ ПОКАЗАНИЯ, кВт",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = uiState.currentReading,
                                 onValueChange = viewModel::onCurrentReadingChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height()
-                                placeholder = { Text("Введите показания", fontSize = 13.sp) },
+                                placeholder = { Text("Введите показания", fontSize = 14.sp) },
                                 singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)  // ← ДОБАВЬ ЭТУ СТРОКУ
                             )
                         }
                     }
                 }
 
+                // КНОПКА "ПЕРЕДАТЬ ПОКАЗАНИЯ"
                 Button(
                     onClick = viewModel::submitReading,
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !uiState.isLoading,
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF8C00))
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFFF8C00)
+                    )
                 ) {
                     if (uiState.isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White)
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = Color.White
+                        )
                     } else {
                         Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(16.dp))
                     }
@@ -185,10 +249,13 @@ fun CalculatorScreen(
                     Text("ПЕРЕДАТЬ ПОКАЗАНИЯ", fontSize = 14.sp)
                 }
 
+                // РЕЗУЛЬТАТ РАСЧЁТА
                 if (uiState.showResult && uiState.resultText.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFD4EDDA)),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFD4EDDA)
+                        ),
                         elevation = CardDefaults.cardElevation(2.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
@@ -198,7 +265,12 @@ fun CalculatorScreen(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(text = "📊 РЕЗУЛЬТАТ", fontWeight = FontWeight.Bold, color = Color(0xFF155724), fontSize = 14.sp)
+                                Text(
+                                    text = "📊 РЕЗУЛЬТАТ",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF155724),
+                                    fontSize = 14.sp
+                                )
                                 IconButton(
                                     onClick = {
                                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -208,22 +280,39 @@ fun CalculatorScreen(
                                     },
                                     modifier = Modifier.size(20.dp)
                                 ) {
-                                    Icon(Icons.Default.CopyAll, contentDescription = "Копировать", tint = Color(0xFF155724), modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        Icons.Default.CopyAll,
+                                        contentDescription = "Копировать",
+                                        tint = Color(0xFF155724),
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                 }
                             }
                             Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = uiState.resultText, color = Color(0xFF155724), fontSize = 12.sp)
+                            Text(
+                                text = uiState.resultText,
+                                color = Color(0xFF155724),
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
 
+                // ИНФОРМАЦИОННАЯ КАРТОЧКА
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color(0xFFF8F9FA)
+                    ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
-                        Text(text = "💡 КАК ПОЛЬЗОВАТЬСЯ", fontWeight = FontWeight.Bold, color = Color(0xFF6C757D), fontSize = 12.sp)
+                        Text(
+                            text = "💡 КАК ПОЛЬЗОВАТЬСЯ",
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF6C757D),
+                            fontSize = 12.sp
+                        )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "1. Введите ТЕКУЩИЕ показания\n" +
@@ -240,6 +329,7 @@ fun CalculatorScreen(
     }
 }
 
+// КОМПАКТНАЯ КНОПКА НАВИГАЦИИ
 @Composable
 fun NavigationButton(
     text: String,
@@ -250,7 +340,9 @@ fun NavigationButton(
     Button(
         onClick = onClick,
         modifier = modifier.height(36.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = color
+        ),
         shape = RoundedCornerShape(6.dp),
         contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp)
     ) {
