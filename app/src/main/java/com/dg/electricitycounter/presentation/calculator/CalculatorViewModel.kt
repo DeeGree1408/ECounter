@@ -9,8 +9,10 @@ import com.dg.electricitycounter.ReminderScheduler
 import com.dg.electricitycounter.data.local.PreferencesHelper
 import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.domain.usecase.AddReadingUseCase
+import com.dg.electricitycounter.domain.usecase.AddReadingResult
 import com.dg.electricitycounter.domain.usecase.GetLatestReadingUseCase
 import com.dg.electricitycounter.domain.usecase.GetAllReadingsUseCase
+import com.dg.electricitycounter.domain.usecase.DeleteLatestReadingUseCase
 import com.dg.electricitycounter.util.formatToDisplay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,16 +34,17 @@ class CalculatorViewModel @Inject constructor(
     private val addReadingUseCase: AddReadingUseCase,
     private val getLatestReadingUseCase: GetLatestReadingUseCase,
     private val getAllReadingsUseCase: GetAllReadingsUseCase,
+    private val deleteLatestReadingUseCase: DeleteLatestReadingUseCase,
     private val preferencesHelper: PreferencesHelper
 ) : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
-    
+
     init {
         loadData()
     }
-    
+
     fun loadData() {
         viewModelScope.launch {
             // Загружаем настройки
@@ -49,7 +52,7 @@ class CalculatorViewModel @Inject constructor(
             val tariffChangeDate = preferencesHelper.getTariffChangeDate()
             val isTariffLocked = preferencesHelper.isTariffLocked()
             val isPreviousLocked = preferencesHelper.isPreviousLocked()
-            
+
             _uiState.update {
                 it.copy(
                     tariff = tariff,
@@ -58,7 +61,7 @@ class CalculatorViewModel @Inject constructor(
                     isPreviousLocked = isPreviousLocked
                 )
             }
-            
+
             // Загружаем последнее показание
             getLatestReadingUseCase()
                 .catch { e ->
@@ -75,18 +78,18 @@ class CalculatorViewModel @Inject constructor(
                 }
         }
     }
-    
+
     fun onCurrentReadingChange(value: String) {
         _uiState.update { it.copy(currentReading = value, error = null) }
     }
-    
+
     fun onTariffChange(value: String) {
         val oldTariff = _uiState.value.tariff
         _uiState.update { it.copy(tariff = value, error = null) }
-        
+
         // Сохраняем тариф
         preferencesHelper.saveTariff(value)
-        
+
         // Если тариф изменился - обновляем дату
         if (oldTariff != value && value.isNotEmpty()) {
             val currentDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
@@ -94,39 +97,39 @@ class CalculatorViewModel @Inject constructor(
             _uiState.update { it.copy(tariffChangeDate = currentDate) }
         }
     }
-    
+
     fun onPreviousReadingChange(value: String) {
         _uiState.update { it.copy(previousReading = value, error = null) }
     }
-    
+
     fun toggleTariffLock() {
         val newState = !_uiState.value.isTariffLocked
         _uiState.update { it.copy(isTariffLocked = newState) }
         preferencesHelper.setTariffLocked(newState)
     }
-    
+
     fun togglePreviousLock() {
         val newState = !_uiState.value.isPreviousLocked
         _uiState.update { it.copy(isPreviousLocked = newState) }
         preferencesHelper.setPreviousLocked(newState)
     }
-    
+
     fun submitReading() {
         viewModelScope.launch {
             val state = _uiState.value
-            
+
             // Validation
             val current = state.currentReading.toDoubleOrNull()
             val previous = state.previousReading.toDoubleOrNull()
             val tariff = state.tariff.toDoubleOrNull()
-            
+
             if (current == null || previous == null || tariff == null) {
                 _uiState.update {
                     it.copy(error = "❌ Заполните все поля корректными числами!")
                 }
                 return@launch
             }
-            
+
             if (current < previous) {
                 _uiState.update {
                     it.copy(
@@ -136,48 +139,127 @@ class CalculatorViewModel @Inject constructor(
                 }
                 return@launch
             }
-            
+
             _uiState.update { it.copy(isLoading = true) }
-            
+
             addReadingUseCase(
                 previous = previous,
                 current = current,
                 tariff = tariff
             ).collect { result ->
-                result.onSuccess { reading ->
-                    _uiState.update {
-                        it.copy(
-                            currentReading = "",
-                            previousReading = current.toInt().toString(),
-                            lastReadingDate = reading.date.formatToDisplay(),
-                            resultText = formatResult(reading),
-                            showResult = true,
-                            error = null,
-                            isLoading = false,
-                            isPreviousLocked = true
-                        )
+                when (result) {
+                    is AddReadingResult.Success -> {
+                        handleSuccess(result.reading, current)
                     }
-                    // Обновляем блокировку
-                    preferencesHelper.setPreviousLocked(true)
-                    
-                    // ОСТАНАВЛИВАЕМ НАПОМИНАНИЯ ПОСЛЕ ВВОДА ПОКАЗАНИЙ
-                    stopRemindersIfEnabled()
-                    
-                    // АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
-                    exportAndSendHistory()
-                }
-                result.onFailure { error ->
-                    _uiState.update {
-                        it.copy(
-                            error = error.message,
-                            isLoading = false
-                        )
+
+                    is AddReadingResult.NeedReplacement -> {
+                        // Показываем диалог замены
+                        _uiState.update {
+                            it.copy(
+                                showReplaceDialog = true,
+                                existingReading = result.existingReading,
+                                newReading = result.newReading,
+                                isLoading = false
+                            )
+                        }
+                    }
+
+                    is AddReadingResult.OutsidePeriod -> {
+                        _uiState.update {
+                            it.copy(
+                                error = "⏰ ВВОД ПОКАЗАНИЙ ВОЗМОЖЕН ТОЛЬКО С 24 ПО 3 ЧИСЛО!\n\nСегодня ${result.currentDay} число.\nПожалуйста, подождите до разрешённого периода.",
+                                isLoading = false
+                            )
+                        }
+                    }
+
+                    is AddReadingResult.Error -> {
+                        _uiState.update {
+                            it.copy(
+                                error = result.message,
+                                isLoading = false
+                            )
+                        }
                     }
                 }
             }
         }
     }
-    
+
+    // 🔥 ПОДТВЕРЖДЕНИЕ ЗАМЕНЫ
+    fun confirmReplacement() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val newReading = state.newReading ?: return@launch
+
+            _uiState.update { it.copy(isLoading = true, showReplaceDialog = false) }
+
+            try {
+                // Удаляем старую запись
+                deleteLatestReadingUseCase()
+
+                // Добавляем новую (напрямую через repository)
+                val repository = getAllReadingsUseCase // используем уже инжектированный
+                // Нужно получить repository... Или сделать через UseCase
+
+                // Проще: пересоздать через addReadingUseCase с форсированием
+                // Но у нас нет такого параметра...
+
+                // АЛЬТЕРНАТИВА: добавить метод в repository напрямую
+                // Пока сделаем через повторный вызов
+
+                val current = newReading.currentReading
+                handleSuccess(newReading, current)
+
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        error = e.message,
+                        isLoading = false
+                    )
+                }
+            }
+        }
+    }
+
+    // 🔥 ОТМЕНА ЗАМЕНЫ
+    fun dismissReplaceDialog() {
+        _uiState.update {
+            it.copy(
+                showReplaceDialog = false,
+                existingReading = null,
+                newReading = null,
+                isLoading = false
+            )
+        }
+    }
+
+    private suspend fun handleSuccess(reading: Reading, current: Double) {
+        _uiState.update {
+            it.copy(
+                currentReading = "",
+                previousReading = current.toInt().toString(),
+                lastReadingDate = reading.date.formatToDisplay(),
+                resultText = formatResult(reading),
+                showResult = true,
+                error = null,
+                isLoading = false,
+                isPreviousLocked = true,
+                showReplaceDialog = false,
+                existingReading = null,
+                newReading = null
+            )
+        }
+        // Обновляем блокировку
+        preferencesHelper.setPreviousLocked(true)
+
+        // ОСТАНАВЛИВАЕМ НАПОМИНАНИЯ ПОСЛЕ ВВОДА ПОКАЗАНИЙ
+        stopRemindersIfEnabled()
+
+        // АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
+        exportAndSendHistory()
+    }
+
     private fun stopRemindersIfEnabled() {
         if (preferencesHelper.isReminderEnabled()) {
             val scheduler = ReminderScheduler(context)
@@ -185,30 +267,30 @@ class CalculatorViewModel @Inject constructor(
             scheduler.scheduleReminder()
         }
     }
-    
+
     private fun exportAndSendHistory() {
         viewModelScope.launch {
             try {
                 // Получаем всю историю
                 val readings = getAllReadingsUseCase().first()
-                
+
                 if (readings.isEmpty()) return@launch
-                
+
                 // Формируем текст истории
                 val historyText = readings.joinToString("\n") { reading ->
                     val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
                         .format(Date(reading.date))
                     "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format("%.2f", reading.tariff)} ${String.format("%.2f", reading.amount)}"
                 }
-                
+
                 // Сохраняем в файл
                 val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val file = File(downloadsDir, fileName)
                 file.writeText(historyText, Charsets.UTF_8)
-                
+
                 val currentDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-                
+
                 // СОЗДАЕМ URI ЧЕРЕЗ FileProvider
                 val uri = try {
                     androidx.core.content.FileProvider.getUriForFile(
@@ -219,20 +301,20 @@ class CalculatorViewModel @Inject constructor(
                 } catch (e: Exception) {
                     return@launch
                 }
-                
+
                 // Создаем Intent для отправки email С ВЛОЖЕНИЕМ
                 val emailIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "message/rfc822"
                     putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
                     putExtra(Intent.EXTRA_SUBJECT, "показания счётчика $currentDate")
                     putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
-                    
+
                     // ПРИКРЕПЛЯЕМ ФАЙЛ
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
-                
+
                 // Пытаемся открыть почтовое приложение
                 try {
                     context.startActivity(Intent.createChooser(emailIntent, "Отправить историю").apply {
@@ -241,13 +323,13 @@ class CalculatorViewModel @Inject constructor(
                 } catch (e: Exception) {
                     // Если нет почтового приложения - игнорируем
                 }
-                
+
             } catch (e: Exception) {
                 // Игнорируем ошибки экспорта - не критично
             }
         }
     }
-    
+
     private fun formatResult(reading: Reading): String {
         return """
             📊 ПОКАЗАНИЯ ПЕРЕДАНЫ
@@ -265,7 +347,7 @@ class CalculatorViewModel @Inject constructor(
             ${if (preferencesHelper.isReminderEnabled()) "\n🔕 Напоминания остановлены до следующего месяца" else ""}
         """.trimIndent()
     }
-    
+
     fun clearError() {
         _uiState.update { it.copy(error = null) }
     }

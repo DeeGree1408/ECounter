@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dg.electricitycounter.util.formatToDisplay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +47,16 @@ fun CalculatorScreen(
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
             viewModel.clearError()
         }
+    }
+
+    // 🔥 ДИАЛОГ ЗАМЕНЫ ПОКАЗАНИЙ (КРУПНЫЙ СТИЛЬ)
+    if (uiState.showReplaceDialog && uiState.existingReading != null && uiState.newReading != null) {
+        ReplaceReadingDialog(
+            existingReading = uiState.existingReading!!,
+            newReading = uiState.newReading!!,
+            onConfirm = viewModel::confirmReplacement,
+            onDismiss = viewModel::dismissReplaceDialog
+        )
     }
 
     Scaffold { paddingValues ->
@@ -94,11 +105,11 @@ fun CalculatorScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),  // 🔥 УМЕНЬШЕНО с 12dp до 8dp
-                        verticalArrangement = Arrangement.spacedBy(2.dp)  // 🔥 УМЕНЬШЕНО с 12dp до 2dp!
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
                         // ТАРИФ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 if (uiState.tariffChangeDate.isNotEmpty()) {
@@ -126,7 +137,7 @@ fun CalculatorScreen(
                         }
 
                         // ПРЕДЫДУЩИЕ ПОКАЗАНИЯ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(text = uiState.lastReadingDate, fontSize = 10.sp, color = Color.Gray)
@@ -152,7 +163,7 @@ fun CalculatorScreen(
                         }
 
                         // ТЕКУЩИЕ ПОКАЗАНИЯ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             OutlinedTextField(
                                 value = uiState.currentReading,
@@ -234,6 +245,100 @@ fun CalculatorScreen(
             }
         }
     }
+}
+
+// 🔥 КРУПНЫЙ ДИАЛОГ ЗАМЕНЫ (СТИЛЬ КАК У DELETE)
+@Composable
+fun ReplaceReadingDialog(
+    existingReading: com.dg.electricitycounter.domain.model.Reading,
+    newReading: com.dg.electricitycounter.domain.model.Reading,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("⚠️ ЗАМЕНИТЬ ПОКАЗАНИЯ?", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column {
+                Text(
+                    "Показания за ${existingReading.date.formatToDisplay()} уже введены!",
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Хотите заменить их новыми данными?",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // ТЕКУЩИЕ ДАННЫЕ
+                Text("📊 ТЕКУЩИЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFDC3545))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${existingReading.previousReading.toInt()} → ${existingReading.currentReading.toInt()}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "Расход: ${existingReading.consumption.toInt()} кВт·ч",
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = "Сумма: ${String.format("%.2f", existingReading.amount)} ₽",
+                    fontSize = 12.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // НОВЫЕ ДАННЫЕ
+                Text("🆕 НОВЫЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF28A745))
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "${newReading.previousReading.toInt()} → ${newReading.currentReading.toInt()}",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "Расход: ${newReading.consumption.toInt()} кВт·ч",
+                    fontSize = 12.sp
+                )
+                Text(
+                    text = "Сумма: ${String.format("%.2f", newReading.amount)} ₽",
+                    fontSize = 12.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Текущие данные будут безвозвратно удалены!",
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC3545)),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text("ЗАМЕНИТЬ", fontSize = 12.sp)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(
+                onClick = onDismiss,
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text("ОТМЕНА", fontSize = 12.sp)
+            }
+        }
+    )
 }
 
 @Composable
