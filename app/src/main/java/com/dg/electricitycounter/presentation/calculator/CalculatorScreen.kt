@@ -44,18 +44,26 @@ fun CalculatorScreen(
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
-            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
-            viewModel.clearError()
+            if (error.contains("Заполните") || error.contains("меньше")) {
+                Toast.makeText(context, error, Toast.LENGTH_LONG).show()
+                viewModel.clearError()
+            }
         }
     }
 
-    // 🔥 ДИАЛОГ ЗАМЕНЫ ПОКАЗАНИЙ (КРУПНЫЙ СТИЛЬ)
     if (uiState.showReplaceDialog && uiState.existingReading != null && uiState.newReading != null) {
         ReplaceReadingDialog(
             existingReading = uiState.existingReading!!,
             newReading = uiState.newReading!!,
             onConfirm = viewModel::confirmReplacement,
             onDismiss = viewModel::dismissReplaceDialog
+        )
+    }
+
+    if (uiState.showPeriodErrorDialog) {
+        PeriodErrorDialog(
+            currentDay = uiState.periodErrorDay,
+            onDismiss = viewModel::dismissPeriodErrorDialog
         )
     }
 
@@ -105,11 +113,10 @@ fun CalculatorScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        // ТАРИФ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 if (uiState.tariffChangeDate.isNotEmpty()) {
@@ -136,8 +143,7 @@ fun CalculatorScreen(
                             )
                         }
 
-                        // ПРЕДЫДУЩИЕ ПОКАЗАНИЯ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(text = uiState.lastReadingDate, fontSize = 10.sp, color = Color.Gray)
@@ -162,9 +168,9 @@ fun CalculatorScreen(
                             )
                         }
 
-                        // ТЕКУЩИЕ ПОКАЗАНИЯ
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column {
                             Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = uiState.currentReading,
                                 onValueChange = viewModel::onCurrentReadingChange,
@@ -247,7 +253,6 @@ fun CalculatorScreen(
     }
 }
 
-// 🔥 КРУПНЫЙ ДИАЛОГ ЗАМЕНЫ (СТИЛЬ КАК У DELETE)
 @Composable
 fun ReplaceReadingDialog(
     existingReading: com.dg.electricitycounter.domain.model.Reading,
@@ -276,7 +281,6 @@ fun ReplaceReadingDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // ТЕКУЩИЕ ДАННЫЕ
                 Text("📊 ТЕКУЩИЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFDC3545))
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -295,7 +299,6 @@ fun ReplaceReadingDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // НОВЫЕ ДАННЫЕ
                 Text("🆕 НОВЫЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF28A745))
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
@@ -342,6 +345,52 @@ fun ReplaceReadingDialog(
 }
 
 @Composable
+fun PeriodErrorDialog(
+    currentDay: Int,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("⏰ ВВОД НЕВОЗМОЖЕН!", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column {
+                Text(
+                    "Ввод показаний возможен ТОЛЬКО с 24 по 3 число!",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Сегодня $currentDay число.",
+                    fontSize = 14.sp
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    "Пожалуйста, подождите до разрешённого периода ввода данных.",
+                    fontSize = 13.sp,
+                    color = Color.Gray
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3C72)),
+                modifier = Modifier.height(36.dp)
+            ) {
+                Text("ПОНЯТНО", fontSize = 12.sp)
+            }
+        }
+    )
+}
+
+@Composable
 fun NavigationButton(
     text: String,
     onClick: () -> Unit,
@@ -360,7 +409,7 @@ fun NavigationButton(
             fontSize = 14.sp,
             maxLines = 1,
             letterSpacing = (-0.5).sp,
-            overflow = TextOverflow.Ellipsis
+        overflow = TextOverflow.Ellipsis
         )
     }
 }

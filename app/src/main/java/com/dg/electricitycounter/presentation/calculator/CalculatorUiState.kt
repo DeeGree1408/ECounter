@@ -14,9 +14,9 @@ data class CalculatorUiState(
     val showResult: Boolean = false,
     val error: String? = null,
     val isLoading: Boolean = false,
-
-    // 🔥 НОВЫЕ ПОЛЯ ДЛЯ ДИАЛОГА ЗАМЕНЫ
     val showReplaceDialog: Boolean = false,
     val existingReading: Reading? = null,
-    val newReading: Reading? = null
+    val newReading: Reading? = null,
+    val showPeriodErrorDialog: Boolean = false,
+    val periodErrorDay: Int = 0
 )

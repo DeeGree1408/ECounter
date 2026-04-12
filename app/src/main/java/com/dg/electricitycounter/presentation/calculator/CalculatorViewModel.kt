@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.dg.electricitycounter.ReminderScheduler
 import com.dg.electricitycounter.data.local.PreferencesHelper
 import com.dg.electricitycounter.domain.model.Reading
+import com.dg.electricitycounter.domain.repository.ReadingRepository
 import com.dg.electricitycounter.domain.usecase.AddReadingUseCase
 import com.dg.electricitycounter.domain.usecase.AddReadingResult
 import com.dg.electricitycounter.domain.usecase.GetLatestReadingUseCase
@@ -35,7 +36,8 @@ class CalculatorViewModel @Inject constructor(
     private val getLatestReadingUseCase: GetLatestReadingUseCase,
     private val getAllReadingsUseCase: GetAllReadingsUseCase,
     private val deleteLatestReadingUseCase: DeleteLatestReadingUseCase,
-    private val preferencesHelper: PreferencesHelper
+    private val preferencesHelper: PreferencesHelper,
+    private val repository: ReadingRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CalculatorUiState())
@@ -47,7 +49,6 @@ class CalculatorViewModel @Inject constructor(
 
     fun loadData() {
         viewModelScope.launch {
-            // Загружаем настройки
             val tariff = preferencesHelper.getTariff()
             val tariffChangeDate = preferencesHelper.getTariffChangeDate()
             val isTariffLocked = preferencesHelper.isTariffLocked()
@@ -62,7 +63,6 @@ class CalculatorViewModel @Inject constructor(
                 )
             }
 
-            // Загружаем последнее показание
             getLatestReadingUseCase()
                 .catch { e ->
                     _uiState.update { it.copy(error = e.message) }
@@ -87,10 +87,8 @@ class CalculatorViewModel @Inject constructor(
         val oldTariff = _uiState.value.tariff
         _uiState.update { it.copy(tariff = value, error = null) }
 
-        // Сохраняем тариф
         preferencesHelper.saveTariff(value)
 
-        // Если тариф изменился - обновляем дату
         if (oldTariff != value && value.isNotEmpty()) {
             val currentDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
             preferencesHelper.saveTariffChangeDate(currentDate)
@@ -118,7 +116,6 @@ class CalculatorViewModel @Inject constructor(
         viewModelScope.launch {
             val state = _uiState.value
 
-            // Validation
             val current = state.currentReading.toDoubleOrNull()
             val previous = state.previousReading.toDoubleOrNull()
             val tariff = state.tariff.toDoubleOrNull()
@@ -153,7 +150,6 @@ class CalculatorViewModel @Inject constructor(
                     }
 
                     is AddReadingResult.NeedReplacement -> {
-                        // Показываем диалог замены
                         _uiState.update {
                             it.copy(
                                 showReplaceDialog = true,
@@ -167,7 +163,8 @@ class CalculatorViewModel @Inject constructor(
                     is AddReadingResult.OutsidePeriod -> {
                         _uiState.update {
                             it.copy(
-                                error = "⏰ ВВОД ПОКАЗАНИЙ ВОЗМОЖЕН ТОЛЬКО С 24 ПО 3 ЧИСЛО!\n\nСегодня ${result.currentDay} число.\nПожалуйста, подождите до разрешённого периода.",
+                                showPeriodErrorDialog = true,
+                                periodErrorDay = result.currentDay,
                                 isLoading = false
                             )
                         }
@@ -186,30 +183,16 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
-    // 🔥 ПОДТВЕРЖДЕНИЕ ЗАМЕНЫ
     fun confirmReplacement() {
         viewModelScope.launch {
-            val state = _uiState.value
-            val newReading = state.newReading ?: return@launch
+            val newReading = _uiState.value.newReading ?: return@launch
 
             _uiState.update { it.copy(isLoading = true, showReplaceDialog = false) }
 
             try {
-                // Удаляем старую запись
                 deleteLatestReadingUseCase()
-
-                // Добавляем новую (напрямую через repository)
-                val repository = getAllReadingsUseCase // используем уже инжектированный
-                // Нужно получить repository... Или сделать через UseCase
-
-                // Проще: пересоздать через addReadingUseCase с форсированием
-                // Но у нас нет такого параметра...
-
-                // АЛЬТЕРНАТИВА: добавить метод в repository напрямую
-                // Пока сделаем через повторный вызов
-
-                val current = newReading.currentReading
-                handleSuccess(newReading, current)
+                repository.addReading(newReading)
+                handleSuccess(newReading, newReading.currentReading)
 
             } catch (e: Exception) {
                 _uiState.update {
@@ -222,7 +205,6 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
-    // 🔥 ОТМЕНА ЗАМЕНЫ
     fun dismissReplaceDialog() {
         _uiState.update {
             it.copy(
@@ -230,6 +212,15 @@ class CalculatorViewModel @Inject constructor(
                 existingReading = null,
                 newReading = null,
                 isLoading = false
+            )
+        }
+    }
+
+    fun dismissPeriodErrorDialog() {
+        _uiState.update {
+            it.copy(
+                showPeriodErrorDialog = false,
+                periodErrorDay = 0
             )
         }
     }
@@ -250,13 +241,9 @@ class CalculatorViewModel @Inject constructor(
                 newReading = null
             )
         }
-        // Обновляем блокировку
+
         preferencesHelper.setPreviousLocked(true)
-
-        // ОСТАНАВЛИВАЕМ НАПОМИНАНИЯ ПОСЛЕ ВВОДА ПОКАЗАНИЙ
         stopRemindersIfEnabled()
-
-        // АВТОМАТИЧЕСКИЙ ЭКСПОРТ И ОТПРАВКА НА ПОЧТУ
         exportAndSendHistory()
     }
 
@@ -271,19 +258,16 @@ class CalculatorViewModel @Inject constructor(
     private fun exportAndSendHistory() {
         viewModelScope.launch {
             try {
-                // Получаем всю историю
                 val readings = getAllReadingsUseCase().first()
 
                 if (readings.isEmpty()) return@launch
 
-                // Формируем текст истории
                 val historyText = readings.joinToString("\n") { reading ->
                     val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
                         .format(Date(reading.date))
                     "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format("%.2f", reading.tariff)} ${String.format("%.2f", reading.amount)}"
                 }
 
-                // Сохраняем в файл
                 val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val file = File(downloadsDir, fileName)
@@ -291,7 +275,6 @@ class CalculatorViewModel @Inject constructor(
 
                 val currentDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
 
-                // СОЗДАЕМ URI ЧЕРЕЗ FileProvider
                 val uri = try {
                     androidx.core.content.FileProvider.getUriForFile(
                         context,
@@ -302,30 +285,26 @@ class CalculatorViewModel @Inject constructor(
                     return@launch
                 }
 
-                // Создаем Intent для отправки email С ВЛОЖЕНИЕМ
                 val emailIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "message/rfc822"
                     putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
                     putExtra(Intent.EXTRA_SUBJECT, "показания счётчика $currentDate")
                     putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
-
-                    // ПРИКРЕПЛЯЕМ ФАЙЛ
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
 
-                // Пытаемся открыть почтовое приложение
                 try {
                     context.startActivity(Intent.createChooser(emailIntent, "Отправить историю").apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     })
                 } catch (e: Exception) {
-                    // Если нет почтового приложения - игнорируем
+                    // Игнорируем
                 }
 
             } catch (e: Exception) {
-                // Игнорируем ошибки экспорта - не критично
+                // Игнорируем
             }
         }
     }
