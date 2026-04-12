@@ -4,10 +4,13 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -38,9 +41,7 @@ fun CalculatorScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
-    LaunchedEffect(Unit) {
-        viewModel.loadData()
-    }
+    LaunchedEffect(Unit) { viewModel.loadData() }
 
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
@@ -89,6 +90,7 @@ fun CalculatorScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Заголовок
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth()
@@ -98,6 +100,7 @@ fun CalculatorScreen(
                     Text(text = "Учёт и расчёт электроэнергии", fontSize = 12.sp, color = Color(0xFFAAAAAA))
                 }
 
+                // Кнопки навигации
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(1.dp)
@@ -106,6 +109,7 @@ fun CalculatorScreen(
                     NavigationButton(text = "ИСТОРИЯ", onClick = onNavigateToHistory, color = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
                 }
 
+                // Карточка с полями ввода
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -114,8 +118,9 @@ fun CalculatorScreen(
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        // 1. ТАРИФ (Компактный)
                         Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -123,12 +128,9 @@ fun CalculatorScreen(
                                     Text(text = "действует с ${uiState.tariffChangeDate}", fontSize = 10.sp, color = Color.Gray)
                                 }
                             }
-                            OutlinedTextField(
+                            CompactInputField(
                                 value = uiState.tariff,
                                 onValueChange = viewModel::onTariffChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !uiState.isTariffLocked,
-                                singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                                 trailingIcon = {
                                     IconButton(onClick = viewModel::toggleTariffLock, modifier = Modifier.size(20.dp)) {
@@ -139,21 +141,20 @@ fun CalculatorScreen(
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
-                                }
+                                },
+                                enabled = !uiState.isTariffLocked
                             )
                         }
 
+                        // 2. СТАРЫЕ ПОКАЗАНИЯ (Компактный)
                         Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(text = uiState.lastReadingDate, fontSize = 10.sp, color = Color.Gray)
                             }
-                            OutlinedTextField(
+                            CompactInputField(
                                 value = uiState.previousReading,
                                 onValueChange = viewModel::onPreviousReadingChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                enabled = !uiState.isPreviousLocked,
-                                singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 trailingIcon = {
                                     IconButton(onClick = viewModel::togglePreviousLock, modifier = Modifier.size(20.dp)) {
@@ -164,25 +165,26 @@ fun CalculatorScreen(
                                             modifier = Modifier.size(18.dp)
                                         )
                                     }
-                                }
+                                },
+                                enabled = !uiState.isPreviousLocked
                             )
                         }
 
+                        // 3. НОВЫЕ ПОКАЗАНИЯ (Компактный)
                         Column {
                             Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
-                            OutlinedTextField(
+                            Spacer(modifier = Modifier.height(2.dp))
+                            CompactInputField(
                                 value = uiState.currentReading,
                                 onValueChange = viewModel::onCurrentReadingChange,
-                                modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("Введите показания", fontSize = 14.sp) },
-                                singleLine = true,
+                                placeholder = "Введите показания",
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
                         }
                     }
                 }
 
+                // Кнопка отправки
                 Button(
                     onClick = viewModel::submitReading,
                     modifier = Modifier.fillMaxWidth(),
@@ -198,6 +200,7 @@ fun CalculatorScreen(
                     Text("ПЕРЕДАТЬ ПОКАЗАНИЯ", fontSize = 14.sp)
                 }
 
+                // Результат
                 if (uiState.showResult && uiState.resultText.isNotEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -230,6 +233,7 @@ fun CalculatorScreen(
                     }
                 }
 
+                // Инфо-карточка
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
@@ -253,6 +257,68 @@ fun CalculatorScreen(
     }
 }
 
+// ==========================================
+// 🔥 КОМПОНЕНТ КОМПАКТНОГО ПОЛЯ ВВОДА
+// ==========================================
+@Composable
+fun CompactInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    keyboardOptions: KeyboardOptions,
+    placeholder: String = "",
+    trailingIcon: @Composable (() -> Unit)? = null,
+    enabled: Boolean = true
+) {
+    // Жестко заданная высота 44dp и рамка вручную
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(36.dp)
+            .border(
+                width = 1.dp,
+                color = if (enabled) Color(0xFFCCCCCC) else Color(0xFFEEEEEE),
+                shape = RoundedCornerShape(4.dp)
+            )
+            .padding(end = 4.dp), // Место под иконку
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+            // Placeholder (если пусто)
+            if (value.isEmpty() && placeholder.isNotEmpty()) {
+                Text(
+                    text = placeholder,
+                    color = Color(0xFF999999),
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(start = 12.dp)
+                )
+            }
+            // Само поле ввода (BasicTextField)
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                enabled = enabled,
+                singleLine = true,
+                keyboardOptions = keyboardOptions,
+                textStyle = LocalTextStyle.current.copy(
+                    fontSize = 14.sp,
+                    color = if (enabled) Color(0xFF000000) else Color(0xFF999999)
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 0.dp)
+            )
+        }
+
+        // Иконка (замок)
+        if (trailingIcon != null) trailingIcon()
+    }
+}
+
+// ==========================================
+// ДИАЛОГИ И НАВИГАЦИЯ
+// ==========================================
+
 @Composable
 fun ReplaceReadingDialog(
     existingReading: com.dg.electricitycounter.domain.model.Reading,
@@ -262,82 +328,35 @@ fun ReplaceReadingDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("⚠️ ЗАМЕНИТЬ ПОКАЗАНИЯ?", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        },
+        title = { Text("⚠️ ЗАМЕНИТЬ ПОКАЗАНИЯ?", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text(
-                    "Показания за ${existingReading.date.formatToDisplay()} уже введены!",
-                    fontSize = 14.sp
-                )
+                Text("Показания за ${existingReading.date.formatToDisplay()} уже введены!", fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Хотите заменить их новыми данными?",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
+                Text("Хотите заменить их новыми данными?", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text("📊 ТЕКУЩИЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFFDC3545))
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${existingReading.previousReading.toInt()} → ${existingReading.currentReading.toInt()}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "Расход: ${existingReading.consumption.toInt()} кВт·ч",
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = "Сумма: ${String.format("%.2f", existingReading.amount)} ₽",
-                    fontSize = 12.sp
-                )
-
+                Text("${existingReading.previousReading.toInt()} → ${existingReading.currentReading.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Расход: ${existingReading.consumption.toInt()} кВт·ч", fontSize = 12.sp)
+                Text("Сумма: ${String.format("%.2f", existingReading.amount)} ₽", fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-
                 Text("🆕 НОВЫЕ ДАННЫЕ:", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = Color(0xFF28A745))
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${newReading.previousReading.toInt()} → ${newReading.currentReading.toInt()}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = "Расход: ${newReading.consumption.toInt()} кВт·ч",
-                    fontSize = 12.sp
-                )
-                Text(
-                    text = "Сумма: ${String.format("%.2f", newReading.amount)} ₽",
-                    fontSize = 12.sp
-                )
-
+                Text("${newReading.previousReading.toInt()} → ${newReading.currentReading.toInt()}", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Text("Расход: ${newReading.consumption.toInt()} кВт·ч", fontSize = 12.sp)
+                Text("Сумма: ${String.format("%.2f", newReading.amount)} ₽", fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    text = "Текущие данные будут безвозвратно удалены!",
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
+                Text("Текущие данные будут безвозвратно удалены!", fontSize = 11.sp, color = Color.Gray)
             }
         },
         confirmButton = {
-            Button(
-                onClick = onConfirm,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC3545)),
-                modifier = Modifier.height(36.dp)
-            ) {
+            Button(onClick = onConfirm, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC3545)), modifier = Modifier.height(36.dp)) {
                 Text("ЗАМЕНИТЬ", fontSize = 12.sp)
             }
         },
         dismissButton = {
-            OutlinedButton(
-                onClick = onDismiss,
-                modifier = Modifier.height(36.dp)
-            ) {
+            OutlinedButton(onClick = onDismiss, modifier = Modifier.height(36.dp)) {
                 Text("ОТМЕНА", fontSize = 12.sp)
             }
         }
@@ -351,39 +370,18 @@ fun PeriodErrorDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = {
-            Text("⏰ ВВОД НЕВОЗМОЖЕН!", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        },
+        title = { Text("⏰ ВВОД НЕВОЗМОЖЕН!", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                Text(
-                    "Ввод показаний возможен ТОЛЬКО с 24 по 3 число!",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
+                Text("Ввод показаний возможен ТОЛЬКО с 24 по 3 число!", fontSize = 14.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Сегодня $currentDay число.",
-                    fontSize = 14.sp
-                )
-
+                Text("Сегодня $currentDay число.", fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-
-                Text(
-                    "Пожалуйста, подождите до разрешённого периода ввода данных.",
-                    fontSize = 13.sp,
-                    color = Color.Gray
-                )
+                Text("Пожалуйста, подождите до разрешённого периода ввода данных.", fontSize = 13.sp, color = Color.Gray)
             }
         },
         confirmButton = {
-            Button(
-                onClick = onDismiss,
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3C72)),
-                modifier = Modifier.height(36.dp)
-            ) {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E3C72)), modifier = Modifier.height(36.dp)) {
                 Text("ПОНЯТНО", fontSize = 12.sp)
             }
         }
@@ -409,7 +407,7 @@ fun NavigationButton(
             fontSize = 14.sp,
             maxLines = 1,
             letterSpacing = (-0.5).sp,
-        overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
