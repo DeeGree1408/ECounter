@@ -51,7 +51,7 @@ fun RemindersScreen(
         if (uiState.isReminderEnabled) {
             while (true) {
                 nextAlarmTime = scheduler.getNextAlarmTime()
-                delay(2000)
+                delay(5000)
             }
         } else {
             nextAlarmTime = null

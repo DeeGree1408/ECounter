@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalculatorScreen(
     onNavigateToReminders: () -> Unit,
@@ -93,12 +94,11 @@ fun CalculatorScreen(
                     shape = RoundedCornerShape(12.dp)
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
-                        // ✅ УМЕНЬШАЕМ ОТСТУПЫ МЕЖДУ ПОЛЯМИ (вместо 12.dp → 4.dp)
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                        modifier = Modifier.padding(8.dp),  // 🔥 УМЕНЬШЕНО с 12dp до 8dp
+                        verticalArrangement = Arrangement.spacedBy(2.dp)  // 🔥 УМЕНЬШЕНО с 12dp до 2dp!
                     ) {
                         // ТАРИФ
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 if (uiState.tariffChangeDate.isNotEmpty()) {
@@ -109,7 +109,6 @@ fun CalculatorScreen(
                                 value = uiState.tariff,
                                 onValueChange = viewModel::onTariffChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height() — поле само подстроится под текст
                                 enabled = !uiState.isTariffLocked,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
@@ -127,7 +126,7 @@ fun CalculatorScreen(
                         }
 
                         // ПРЕДЫДУЩИЕ ПОКАЗАНИЯ
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Text(text = uiState.lastReadingDate, fontSize = 10.sp, color = Color.Gray)
@@ -136,7 +135,6 @@ fun CalculatorScreen(
                                 value = uiState.previousReading,
                                 onValueChange = viewModel::onPreviousReadingChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height()
                                 enabled = !uiState.isPreviousLocked,
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -154,15 +152,13 @@ fun CalculatorScreen(
                         }
 
                         // ТЕКУЩИЕ ПОКАЗАНИЯ
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {  // 🔥 Между заголовком и полем
                             Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = uiState.currentReading,
                                 onValueChange = viewModel::onCurrentReadingChange,
                                 modifier = Modifier.fillMaxWidth(),
-                                // ✅ УБРАЛИ .height()
-                                placeholder = { Text("Введите показания", fontSize = 13.sp) },
+                                placeholder = { Text("Введите показания", fontSize = 14.sp) },
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )

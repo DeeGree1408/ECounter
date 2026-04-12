@@ -28,7 +28,7 @@ class ReminderScheduler(private val context: Context) {
      */
     fun scheduleReminder() {
         Log.d(TAG, "=== scheduleReminder START ===")
-        
+
         // Проверяем разрешения
         if (!canScheduleExactAlarms()) {
             Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
@@ -62,6 +62,9 @@ class ReminderScheduler(private val context: Context) {
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
 
+        // ✅ Сохраняем время будильника локально
+        saveNextAlarmTime(triggerTime)
+
         Log.d(TAG, "✅ Напоминание запланировано на: ${calendar.time}")
         Log.d(TAG, "⏰ Timestamp: $triggerTime (через ${(triggerTime - System.currentTimeMillis()) / 1000 / 60} минут)")
         Log.d(TAG, "=== scheduleReminder END ===")
@@ -72,7 +75,7 @@ class ReminderScheduler(private val context: Context) {
      */
     fun scheduleDailyReminders() {
         Log.d(TAG, "=== scheduleDailyReminders START ===")
-        
+
         if (!canScheduleExactAlarms()) {
             Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
             return
@@ -102,6 +105,9 @@ class ReminderScheduler(private val context: Context) {
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
 
+        // ✅ Сохраняем время будильника локально
+        saveNextAlarmTime(triggerTime)
+
         Log.d(TAG, "✅ Ежедневное напоминание на: ${calendar.time}")
         Log.d(TAG, "=== scheduleDailyReminders END ===")
     }
@@ -114,6 +120,10 @@ class ReminderScheduler(private val context: Context) {
         val pendingIntent = createPendingIntent()
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
+
+        // ✅ Очищаем сохраненное время
+        clearNextAlarmTime()
+
         Log.d(TAG, "✅ Напоминания отменены")
     }
 
@@ -143,7 +153,7 @@ class ReminderScheduler(private val context: Context) {
             triggerTime,
             pendingIntent // showIntent - открывает приложение при нажатии на иконку
         )
-        
+
         try {
             alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
             Log.d(TAG, "✅ setAlarmClock() успешно")
@@ -252,7 +262,7 @@ class ReminderScheduler(private val context: Context) {
         try {
             val intent = Intent().apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                
+
                 // Попытка 1: Настройки запуска
                 component = android.content.ComponentName(
                     "com.huawei.systemmanager",
@@ -286,17 +296,49 @@ class ReminderScheduler(private val context: Context) {
 
     /**
      * Получает время следующего срабатывания (для отображения)
+     * Сначала пытается получить из AlarmManager, потом из локального хранилища
      */
     fun getNextAlarmTime(): Long? {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // Попытка 1: Получить из системы (работает только на Android 12+)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val nextAlarmInfo = alarmManager.nextAlarmClock
             nextAlarmInfo?.triggerTime?.also {
-                Log.d(TAG, "⏰ Следующий будильник: ${Date(it)}")
+                Log.d(TAG, "⏰ Следующий будильник из системы: ${Date(it)}")
+                return it
             }
+        }
+
+        // Попытка 2: Получить из локального хранилища
+        val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
+        val savedTime = prefs.getLong("next_alarm_time", 0L)
+
+        return if (savedTime > System.currentTimeMillis()) {
+            Log.d(TAG, "💾 Следующий будильник из памяти: ${Date(savedTime)}")
+            savedTime
         } else {
+            Log.d(TAG, "❌ Время будильника не найдено или устарело")
             null
         }
     }
+
+    /**
+     * Сохраняет время следующего будильника локально
+     */
+    private fun saveNextAlarmTime(time: Long) {
+        val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
+        prefs.edit().putLong("next_alarm_time", time).apply()
+        Log.d(TAG, "💾 Сохранено время будильника: ${Date(time)}")
+    }
+
+    /**
+     * Очищает сохраненное время будильника
+     */
+    private fun clearNextAlarmTime() {
+        val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
+        prefs.edit().remove("next_alarm_time").apply()
+        Log.d(TAG, "🗑️ Время будильника очищено")
+    }
+
     /**
      * 🧪 ТЕСТОВЫЙ МЕТОД: Установить будильник через N минут
      * Для проверки работы уведомлений
@@ -326,6 +368,9 @@ class ReminderScheduler(private val context: Context) {
             Log.d(TAG, "🧪 Обычное устройство - используем setExactAndAllowWhileIdle()")
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
+
+        // ✅ Сохраняем время тестового будильника
+        saveNextAlarmTime(triggerTime)
 
         val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val message = "🧪 Тестовый будильник установлен на ${dateFormat.format(calendar.time)}"
