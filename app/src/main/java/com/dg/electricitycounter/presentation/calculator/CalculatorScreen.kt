@@ -4,7 +4,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -74,11 +73,7 @@ fun CalculatorScreen(
                 .fillMaxSize()
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            Color(0xFF0F2027),
-                            Color(0xFF203A43),
-                            Color(0xFF2C5364)
-                        )
+                        colors = listOf(Color(0xFF0F2027), Color(0xFF203A43), Color(0xFF2C5364))
                     )
                 )
         ) {
@@ -91,20 +86,14 @@ fun CalculatorScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 // Заголовок
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                     Text(text = "⚡", fontSize = 36.sp, color = Color(0xFFFFD700))
                     Text(text = "ЭЛЕКТРОСЧЁТЧИК", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
                     Text(text = "Учёт и расчёт электроэнергии", fontSize = 12.sp, color = Color(0xFFAAAAAA))
                 }
 
                 // Кнопки навигации
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(1.dp)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(1.dp)) {
                     NavigationButton(text = "НАПОМИНАНИЯ", onClick = onNavigateToReminders, color = Color(0xFF2A5298), modifier = Modifier.weight(1f))
                     NavigationButton(text = "ИСТОРИЯ", onClick = onNavigateToHistory, color = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
                 }
@@ -120,12 +109,16 @@ fun CalculatorScreen(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 1. ТАРИФ (Компактный)
+                        // 1. ТАРИФ
                         Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "ТАРИФ (руб/кВт·ч)", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 if (uiState.tariffChangeDate.isNotEmpty()) {
-                                    Text(text = "действует с ${uiState.tariffChangeDate}", fontSize = 10.sp, color = Color.Gray)
+                                    Text(
+                                        text = "действует с ${formatTariffDate(uiState.tariffChangeDate)}",
+                                        fontSize = 10.sp,
+                                        color = Color.Gray
+                                    )
                                 }
                             }
                             CompactInputField(
@@ -146,7 +139,7 @@ fun CalculatorScreen(
                             )
                         }
 
-                        // 2. СТАРЫЕ ПОКАЗАНИЯ (Компактный)
+                        // 2. СТАРЫЕ ПОКАЗАНИЯ
                         Column {
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text(text = "СТАРЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
@@ -170,7 +163,7 @@ fun CalculatorScreen(
                             )
                         }
 
-                        // 3. НОВЫЕ ПОКАЗАНИЯ (Компактный)
+                        // 3. НОВЫЕ ПОКАЗАНИЯ
                         Column {
                             Text(text = "НОВЫЕ ПОКАЗАНИЯ, кВт", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Spacer(modifier = Modifier.height(2.dp))
@@ -258,7 +251,7 @@ fun CalculatorScreen(
 }
 
 // ==========================================
-// 🔥 КОМПОНЕНТ КОМПАКТНОГО ПОЛЯ ВВОДА
+// 🔥 КОМПАКТНОЕ ПОЛЕ ВВОДА (BasicTextField)
 // ==========================================
 @Composable
 fun CompactInputField(
@@ -269,22 +262,20 @@ fun CompactInputField(
     trailingIcon: @Composable (() -> Unit)? = null,
     enabled: Boolean = true
 ) {
-    // Жестко заданная высота 44dp и рамка вручную
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(36.dp)
+            .height(35.dp) // ✅ Высота уменьшена на ~20%
             .border(
                 width = 1.dp,
                 color = if (enabled) Color(0xFFCCCCCC) else Color(0xFFEEEEEE),
                 shape = RoundedCornerShape(4.dp)
             )
-            .padding(end = 4.dp), // Место под иконку
+            .padding(end = if (trailingIcon != null) 4.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-            // Placeholder (если пусто)
             if (value.isEmpty() && placeholder.isNotEmpty()) {
                 Text(
                     text = placeholder,
@@ -293,7 +284,6 @@ fun CompactInputField(
                     modifier = Modifier.padding(start = 12.dp)
                 )
             }
-            // Само поле ввода (BasicTextField)
             BasicTextField(
                 value = value,
                 onValueChange = onValueChange,
@@ -309,16 +299,33 @@ fun CompactInputField(
                     .padding(horizontal = 12.dp, vertical = 0.dp)
             )
         }
-
-        // Иконка (замок)
         if (trailingIcon != null) trailingIcon()
     }
 }
 
 // ==========================================
+// 📅 ФОРМАТИРОВАНИЕ ДАТЫ ТАРИФА
+// ==========================================
+private fun formatTariffDate(rawDate: String): String {
+    if (rawDate.isEmpty() || rawDate.length < 7) return rawDate
+    val parts = rawDate.split(".")
+    if (parts.size < 3) return rawDate
+
+    val monthNumber = parts[1].toIntOrNull() ?: 0
+    val year = parts[2]
+
+    val months = listOf(
+        "января", "февраля", "марта", "апреля", "мая", "июня",
+        "июля", "августа", "сентября", "октября", "ноября", "декабря"
+    )
+
+    val monthName = if (monthNumber in 1..12) months[monthNumber - 1] else rawDate
+    return "$monthName $year"
+}
+
+// ==========================================
 // ДИАЛОГИ И НАВИГАЦИЯ
 // ==========================================
-
 @Composable
 fun ReplaceReadingDialog(
     existingReading: com.dg.electricitycounter.domain.model.Reading,
