@@ -98,7 +98,25 @@ fun CalculatorScreen(
                     NavigationButton(text = "ИСТОРИЯ", onClick = onNavigateToHistory, color = Color(0xFFFF8C00), modifier = Modifier.weight(1f))
                 }
 
-                // Карточка с полями ввода
+                // 💰 БЛОК ЧЛЕНСКОГО ВЗНОСА (3 поля в одну строку)
+                MembershipFeeCard(
+                    plotNumber = uiState.membershipPlotNumber,
+                    area = uiState.membershipPlotArea,
+                    tariff = uiState.membershipTariff,
+                    total = uiState.membershipFeeTotal,
+                    onNumberChange = viewModel::onMembershipNumberChange,
+                    onAreaChange = viewModel::onMembershipAreaChange,
+                    onTariffChange = viewModel::onMembershipTariffChange,
+                    onCopyClick = viewModel::copyMembershipToClipboard,
+                    isNumberLocked = uiState.isMembershipNumberLocked,
+                    isAreaLocked = uiState.isMembershipAreaLocked,
+                    isTariffLocked = uiState.isMembershipTariffLocked,
+                    onToggleNumberLock = viewModel::toggleMembershipNumberLock,
+                    onToggleAreaLock = viewModel::toggleMembershipAreaLock,
+                    onToggleTariffLock = viewModel::toggleMembershipTariffLock
+                )
+
+                // Карточка с полями ввода (электричество)
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color.White),
@@ -225,26 +243,6 @@ fun CalculatorScreen(
                         }
                     }
                 }
-
-                // Инфо-карточка
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8F9FA)),
-                    shape = RoundedCornerShape(8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Text(text = "💡 КАК ПОЛЬЗОВАТЬСЯ", fontWeight = FontWeight.Bold, color = Color(0xFF6C757D), fontSize = 12.sp)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "1. Введите ТЕКУЩИЕ показания\n" +
-                                    "2. Нажмите 'ПЕРЕДАТЬ ПОКАЗАНИЯ'\n" +
-                                    "3. Результат появится ниже\n" +
-                                    "4. Для изменения тарифа или\n   предыдущих показаний нажмите\n   на замок 🔒 рядом с полем",
-                            color = Color(0xFF6C757D),
-                            fontSize = 11.sp
-                        )
-                    }
-                }
             }
         }
     }
@@ -265,7 +263,7 @@ fun CompactInputField(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(35.dp) // ✅ Высота уменьшена на ~20%
+            .height(35.dp)
             .border(
                 width = 1.dp,
                 color = if (enabled) Color(0xFFCCCCCC) else Color(0xFFEEEEEE),
@@ -416,5 +414,112 @@ fun NavigationButton(
             letterSpacing = (-0.5).sp,
             overflow = TextOverflow.Ellipsis
         )
+    }
+}
+
+// ==========================================
+// 💰 КАРТОЧКА ЧЛЕНСКОГО ВЗНОСА (3 поля в ОДНУ СТРОКУ)
+// ==========================================
+@Composable
+fun MembershipFeeCard(
+    plotNumber: String,
+    area: String,
+    tariff: String,
+    total: String,
+    onNumberChange: (String) -> Unit,
+    onAreaChange: (String) -> Unit,
+    onTariffChange: (String) -> Unit,
+    onCopyClick: () -> Unit,
+    isNumberLocked: Boolean,
+    isAreaLocked: Boolean,
+    isTariffLocked: Boolean,
+    onToggleNumberLock: () -> Unit,
+    onToggleAreaLock: () -> Unit,
+    onToggleTariffLock: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(6.dp),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // Заголовок
+            Text(text = "💰 ЧЛЕНСКИЙ ВЗНОС", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = Color(0xFF1A202C))
+
+            // Три поля в одну строку
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                // 1. № участка
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "№ участка", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    CompactInputField(
+                        value = plotNumber,
+                        onValueChange = onNumberChange,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                        trailingIcon = {
+                            IconButton(onClick = onToggleNumberLock, modifier = Modifier.size(20.dp)) {
+                                Icon(
+                                    if (isNumberLocked) Icons.Default.Lock else Icons.Default.LockOpen,
+                                    contentDescription = "Защита",
+                                    tint = if (isNumberLocked) Color.Gray else Color(0xFF28A745),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        },
+                        enabled = !isNumberLocked
+                    )
+                }
+                // 2. Площадь
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Площадь (сот.)", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    CompactInputField(
+                        value = area, onValueChange = onAreaChange,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        trailingIcon = {
+                            IconButton(onClick = onToggleAreaLock, modifier = Modifier.size(20.dp)) {
+                                Icon(if (isAreaLocked) Icons.Default.Lock else Icons.Default.LockOpen, "Защита",
+                                    tint = if (isAreaLocked) Color.Gray else Color(0xFF28A745), modifier = Modifier.size(18.dp))
+                            }
+                        },
+                        enabled = !isAreaLocked
+                    )
+                }
+                // 3. Тариф
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(text = "Тариф (₽/сот.)", fontSize = 11.sp, color = Color.Gray)
+                    Spacer(modifier = Modifier.height(2.dp))
+                    CompactInputField(
+                        value = tariff, onValueChange = onTariffChange,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        trailingIcon = {
+                            IconButton(onClick = onToggleTariffLock, modifier = Modifier.size(20.dp)) {
+                                Icon(if (isTariffLocked) Icons.Default.Lock else Icons.Default.LockOpen, "Защита",
+                                    tint = if (isTariffLocked) Color.Gray else Color(0xFF28A745), modifier = Modifier.size(18.dp))
+                            }
+                        },
+                        enabled = !isTariffLocked
+                    )
+                }
+            }
+
+            // Итог и Копирование
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Text(text = "Взнос: $total", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E88E5), modifier = Modifier.weight(0.6f))
+                OutlinedButton(
+                    onClick = onCopyClick,
+                    modifier = Modifier.weight(0.4f).height(32.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF1E88E5)),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
+                ) {
+                    Icon(Icons.Default.ContentCopy, "Копировать", modifier = Modifier.size(14.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Копировать", fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
     }
 }

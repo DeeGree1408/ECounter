@@ -18,5 +18,15 @@ data class CalculatorUiState(
     val existingReading: Reading? = null,
     val newReading: Reading? = null,
     val showPeriodErrorDialog: Boolean = false,
-    val periodErrorDay: Int = 0
+    val periodErrorDay: Int = 0,
+
+    // 💰 Членский взнос
+    val membershipPlotNumber: String = "143а",
+    val membershipPlotArea: String = "",
+    val membershipTariff: String = "",
+    val isMembershipNumberLocked: Boolean = true,
+    val isMembershipAreaLocked: Boolean = true,
+    val isMembershipTariffLocked: Boolean = true,
+    val membershipFeeTotal: String = "0.00 ₽",
+    val membershipChangeDate: String = ""
 )

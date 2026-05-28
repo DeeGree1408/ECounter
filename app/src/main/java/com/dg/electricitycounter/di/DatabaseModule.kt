@@ -4,7 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.dg.electricitycounter.data.local.AppDatabase
+import com.dg.electricitycounter.data.AppDatabase
 import com.dg.electricitycounter.data.local.dao.ReadingDao
 import com.dg.electricitycounter.util.DataMigration
 import dagger.Module
