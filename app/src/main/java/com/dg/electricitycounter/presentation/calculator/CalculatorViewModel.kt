@@ -12,8 +12,8 @@ import com.dg.electricitycounter.ReminderScheduler
 import com.dg.electricitycounter.data.local.PreferencesHelper
 import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.domain.repository.ReadingRepository
-import com.dg.electricitycounter.domain.usecase.AddReadingUseCase
 import com.dg.electricitycounter.domain.usecase.AddReadingResult
+import com.dg.electricitycounter.domain.usecase.AddReadingUseCase
 import com.dg.electricitycounter.domain.usecase.DeleteLatestReadingUseCase
 import com.dg.electricitycounter.domain.usecase.GetAllReadingsUseCase
 import com.dg.electricitycounter.domain.usecase.GetLatestReadingUseCase
@@ -46,7 +46,12 @@ class CalculatorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
 
-    // 💰 Отслеживание изменений членского взноса
+    // 💰 Членский взнос: ключи для SharedPreferences
+    private val memPrefsName = "membership_fee_prefs_v2"
+    private val keyNum = "membership_number"
+    private val keyArea = "membership_area"
+    private val keyTariff = "membership_tariff"
+
     private var prevMembershipNumber: String = ""
     private var prevMembershipArea: String = ""
     private var prevMembershipTariff: String = ""
@@ -57,7 +62,7 @@ class CalculatorViewModel @Inject constructor(
     }
 
     // ==========================================
-    // 🔌 ЭЛЕКТРИЧЕСТВО (загрузка данных)
+    // 🔌 ЭЛЕКТРИЧЕСТВО
     // ==========================================
     fun loadData() {
         viewModelScope.launch {
@@ -89,141 +94,9 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
-    // ==========================================
-    //  ЧЛЕНСКИЙ ВЗНОС (логика + сохранение + отправка)
-    // ==========================================
-    fun loadMembershipSettings() {
-        val prefs = context.getSharedPreferences("membership_fee_prefs", Context.MODE_PRIVATE)
-        val number = prefs.getString("membership_number", "143а") ?: "143а"
-        val area = prefs.getString("membership_area", "") ?: ""
-        val tariff = prefs.getString("membership_tariff", "") ?: ""
-
-        _uiState.update {
-            it.copy(
-                membershipPlotNumber = number,
-                membershipPlotArea = area,
-                membershipTariff = tariff
-            )
-        }
-        // 🔑 Фиксируем исходные значения
-        prevMembershipNumber = number
-        prevMembershipArea = area
-        prevMembershipTariff = tariff
-        calculateMembershipFee()
+    fun onCurrentReadingChange(value: String) {
+        _uiState.update { it.copy(currentReading = value, error = null) }
     }
-
-    fun onMembershipNumberChange(value: String) {
-        _uiState.update { it.copy(membershipPlotNumber = value) }
-    }
-    fun onMembershipAreaChange(value: String) {
-        _uiState.update { it.copy(membershipPlotArea = value) }
-        calculateMembershipFee()
-    }
-    fun onMembershipTariffChange(value: String) {
-        _uiState.update { it.copy(membershipTariff = value) }
-        calculateMembershipFee()
-    }
-
-    fun toggleMembershipNumberLock() {
-        val state = _uiState.value
-        val newState = !state.isMembershipNumberLocked
-        if (newState) prevMembershipNumber = state.membershipPlotNumber
-        else if (state.membershipPlotNumber != prevMembershipNumber && state.membershipPlotNumber.isNotEmpty()) saveAndPromptMembershipEmail()
-        _uiState.update { it.copy(isMembershipNumberLocked = newState) }
-    }
-
-    fun toggleMembershipAreaLock() {
-        val state = _uiState.value
-        val newState = !state.isMembershipAreaLocked
-        if (newState) prevMembershipArea = state.membershipPlotArea
-        else if (state.membershipPlotArea != prevMembershipArea && state.membershipPlotArea.isNotEmpty()) saveAndPromptMembershipEmail()
-        _uiState.update { it.copy(isMembershipAreaLocked = newState) }
-    }
-
-    fun toggleMembershipTariffLock() {
-        val state = _uiState.value
-        val newState = !state.isMembershipTariffLocked
-        if (newState) prevMembershipTariff = state.membershipTariff
-        else if (state.membershipTariff != prevMembershipTariff && state.membershipTariff.isNotEmpty()) saveAndPromptMembershipEmail()
-        _uiState.update { it.copy(isMembershipTariffLocked = newState) }
-    }
-
-    private fun saveAndPromptMembershipEmail() {
-        val state = _uiState.value
-        val prefs = context.getSharedPreferences("membership_fee_prefs", Context.MODE_PRIVATE)
-        val currentDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date())
-
-        prefs.edit()
-            .putString("membership_number", state.membershipPlotNumber)
-            .putString("membership_area", state.membershipPlotArea)
-            .putString("membership_tariff", state.membershipTariff)
-            .apply()
-
-        _uiState.update { it.copy(membershipChangeDate = currentDate) }
-
-        //  Визуальный отклик (чтобы точно видеть, что триггер сработал)
-        Toast.makeText(context, "💾 Сохранено! Открываю почту...", Toast.LENGTH_SHORT).show()
-
-        val monthName = getPreviousMonthName()
-        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
-        val emailBody = "Обновление параметров членского взноса.\n" +
-                "Участок: ${state.membershipPlotNumber}\n" +
-                "Период: за $monthName $year\n" +
-                "Площадь: ${state.membershipPlotArea} сот.\n" +
-                "Тариф: ${state.membershipTariff} ₽/сот.\n" +
-                "Сумма: ${state.membershipFeeTotal}"
-
-        val emailIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "message/rfc822"
-            putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-            putExtra(Intent.EXTRA_SUBJECT, "Обновление членского взноса ($currentDate)")
-            putExtra(Intent.EXTRA_TEXT, emailBody)
-            // ✅ Убрали FLAG_ACTIVITY_NEW_TASK, он часто блокирует Chooser
-        }
-
-        try {
-            context.startActivity(Intent.createChooser(emailIntent, "Отправить данные о взносе"))
-        } catch (e: Exception) {
-            Toast.makeText(context, "⚠️ Почтовый клиент не найден. Тестируй на реальном устройстве.", Toast.LENGTH_LONG).show()
-        }
-    }
-
-    fun copyMembershipToClipboard() {
-        val state = _uiState.value
-        val monthName = getPreviousMonthName()
-        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
-
-        // ✅ Точный формат по ТЗ
-        val text = "Членский взнос уч.${state.membershipPlotNumber} за $monthName $year"
-
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        val clip = ClipData.newPlainText("membership_fee", text)
-        clipboard.setPrimaryClip(clip)
-        Toast.makeText(context, "📋 Скопировано: $text", Toast.LENGTH_SHORT).show()
-    }
-
-    private fun calculateMembershipFee() {
-        val state = _uiState.value
-        val area = state.membershipPlotArea.toFloatOrNull() ?: 0f
-        val tariff = state.membershipTariff.toFloatOrNull() ?: 0f
-        val total = area * tariff
-        _uiState.update { it.copy(membershipFeeTotal = String.format(Locale.getDefault(), "%.2f ₽", total)) }
-    }
-
-    private fun getPreviousMonthName(): String {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.MONTH, -1)
-        return listOf(
-            "январь", "февраль", "март", "апрель", "май", "июнь",
-            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
-        )[calendar.get(Calendar.MONTH)]
-    }
-
-    // ==========================================
-    // 🔌 ЭЛЕКТРИЧЕСТВО (ввод и отправка)
-    // ==========================================
-    fun onCurrentReadingChange(value: String) { _uiState.update { it.copy(currentReading = value, error = null) } }
-    fun onPreviousReadingChange(value: String) { _uiState.update { it.copy(previousReading = value, error = null) } }
 
     fun onTariffChange(value: String) {
         val oldTariff = _uiState.value.tariff
@@ -234,6 +107,10 @@ class CalculatorViewModel @Inject constructor(
             preferencesHelper.saveTariffChangeDate(currentDate)
             _uiState.update { it.copy(tariffChangeDate = currentDate) }
         }
+    }
+
+    fun onPreviousReadingChange(value: String) {
+        _uiState.update { it.copy(previousReading = value, error = null) }
     }
 
     fun toggleTariffLock() {
@@ -256,11 +133,16 @@ class CalculatorViewModel @Inject constructor(
             val tariff = state.tariff.toDoubleOrNull()
 
             if (current == null || previous == null || tariff == null) {
-                _uiState.update { it.copy(error = " Заполните все поля корректными числами!") }
+                _uiState.update { it.copy(error = "❌ Заполните все поля корректными числами!") }
                 return@launch
             }
             if (current < previous) {
-                _uiState.update { it.copy(error = "⚠️ ВНИМАНИЕ!\nТекущие показания меньше предыдущих.\nВозможно, был сброс счётчика.", showResult = true) }
+                _uiState.update {
+                    it.copy(
+                        error = "⚠️ ВНИМАНИЕ!\nТекущие показания меньше предыдущих.\nВозможно, был сброс счётчика.",
+                        showResult = true
+                    )
+                }
                 return@launch
             }
 
@@ -270,9 +152,24 @@ class CalculatorViewModel @Inject constructor(
                 .collect { result ->
                     when (result) {
                         is AddReadingResult.Success -> handleSuccess(result.reading, current)
-                        is AddReadingResult.NeedReplacement -> _uiState.update { it.copy(showReplaceDialog = true, existingReading = result.existingReading, newReading = result.newReading, isLoading = false) }
-                        is AddReadingResult.OutsidePeriod -> _uiState.update { it.copy(showPeriodErrorDialog = true, periodErrorDay = result.currentDay, isLoading = false) }
-                        is AddReadingResult.Error -> _uiState.update { it.copy(error = result.message, isLoading = false) }
+                        is AddReadingResult.NeedReplacement -> _uiState.update {
+                            it.copy(
+                                showReplaceDialog = true,
+                                existingReading = result.existingReading,
+                                newReading = result.newReading,
+                                isLoading = false
+                            )
+                        }
+                        is AddReadingResult.OutsidePeriod -> _uiState.update {
+                            it.copy(
+                                showPeriodErrorDialog = true,
+                                periodErrorDay = result.currentDay,
+                                isLoading = false
+                            )
+                        }
+                        is AddReadingResult.Error -> _uiState.update {
+                            it.copy(error = result.message, isLoading = false)
+                        }
                     }
                 }
         }
@@ -286,20 +183,41 @@ class CalculatorViewModel @Inject constructor(
                 deleteLatestReadingUseCase()
                 repository.addReading(newReading)
                 handleSuccess(newReading, newReading.currentReading)
-            } catch (e: Exception) { _uiState.update { it.copy(error = e.message, isLoading = false) } }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = e.message, isLoading = false) }
+            }
         }
     }
 
-    fun dismissReplaceDialog() { _uiState.update { it.copy(showReplaceDialog = false, existingReading = null, newReading = null, isLoading = false) } }
-    fun dismissPeriodErrorDialog() { _uiState.update { it.copy(showPeriodErrorDialog = false, periodErrorDay = 0) } }
+    fun dismissReplaceDialog() {
+        _uiState.update {
+            it.copy(
+                showReplaceDialog = false,
+                existingReading = null,
+                newReading = null,
+                isLoading = false
+            )
+        }
+    }
+
+    fun dismissPeriodErrorDialog() {
+        _uiState.update { it.copy(showPeriodErrorDialog = false, periodErrorDay = 0) }
+    }
 
     private suspend fun handleSuccess(reading: Reading, current: Double) {
         _uiState.update {
             it.copy(
-                currentReading = "", previousReading = current.toInt().toString(),
-                lastReadingDate = reading.date.formatToDisplay(), resultText = formatResult(reading),
-                showResult = true, error = null, isLoading = false, isPreviousLocked = true,
-                showReplaceDialog = false, existingReading = null, newReading = null
+                currentReading = "",
+                previousReading = current.toInt().toString(),
+                lastReadingDate = reading.date.formatToDisplay(),
+                resultText = formatResult(reading),
+                showResult = true,
+                error = null,
+                isLoading = false,
+                isPreviousLocked = true,
+                showReplaceDialog = false,
+                existingReading = null,
+                newReading = null
             )
         }
         preferencesHelper.setPreviousLocked(true)
@@ -320,41 +238,186 @@ class CalculatorViewModel @Inject constructor(
             try {
                 val readings = getAllReadingsUseCase().first()
                 if (readings.isEmpty()) return@launch
+
                 val historyText = readings.joinToString("\n") { reading ->
                     val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(reading.date))
                     "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format("%.2f", reading.tariff)} ${String.format("%.2f", reading.amount)}"
                 }
+
                 val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
                 val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
                 file.writeText(historyText, Charsets.UTF_8)
-                val currentDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
-                val uri = try { androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file) } catch (e: Exception) { return@launch }
+
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
 
                 val emailIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "message/rfc822"
                     putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                    putExtra(Intent.EXTRA_SUBJECT, "показания счётчика $currentDate")
-                    putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
+                    putExtra(Intent.EXTRA_SUBJECT, "Показания счётчика")
+                    putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.")
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                context.startActivity(Intent.createChooser(emailIntent, "Отправить историю"))
-            } catch (e: Exception) { /* Игнорируем */ }
+
+                val chooser = Intent.createChooser(emailIntent, "Отправить историю")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooser)
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
     }
 
     private fun formatResult(reading: Reading): String {
         return """
-         ПОКАЗАНИЯ ПЕРЕДАНЫ
+        📊 ПОКАЗАНИЯ ПЕРЕДАНЫ
+        
         📈 ИЗРАСХОДОВАНО: ${String.format("%.1f", reading.consumption)} кВт·ч
         💰 ТАРИФ: ${String.format("%.2f", reading.tariff)} ₽/кВт·ч
         🏦 СУММА К ОПЛАТЕ: ${String.format("%.2f", reading.amount)} ₽
+        
         📅 Дата передачи: ${reading.date.formatToDisplay()}
         🔄 Показания: ${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}
-        ✅ Предыдущие показания обновлены | ✅ Запись в истории |  История отправлена
+        
+        ✅ Предыдущие показания обновлены | ✅ Запись в истории | 📧 Отправлено
         ${if (preferencesHelper.isReminderEnabled()) "\n🔕 Напоминания остановлены" else ""}
         """.trimIndent()
     }
 
-    fun clearError() { _uiState.update { it.copy(error = null) } }
+    fun clearError() {
+        _uiState.update { it.copy(error = null) }
+    }
+
+    // ==========================================
+    // 💰 ЧЛЕНСКИЙ ВЗНОС (ЧВ)
+    // ==========================================
+    fun loadMembershipSettings() {
+        val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
+        val number = prefs.getString(keyNum, "143а") ?: "143а"
+        val area = prefs.getString(keyArea, "") ?: ""
+        val tariff = prefs.getString(keyTariff, "") ?: ""
+
+        _uiState.update {
+            it.copy(
+                membershipPlotNumber = number,
+                membershipPlotArea = area,
+                membershipTariff = tariff
+            )
+        }
+        prevMembershipNumber = number
+        prevMembershipArea = area
+        prevMembershipTariff = tariff
+        calculateMembershipFee()
+    }
+
+    fun onMembershipNumberChange(value: String) {
+        _uiState.update { it.copy(membershipPlotNumber = value) }
+    }
+
+    fun onMembershipAreaChange(value: String) {
+        _uiState.update { it.copy(membershipPlotArea = value) }
+        calculateMembershipFee()
+    }
+
+    fun onMembershipTariffChange(value: String) {
+        _uiState.update { it.copy(membershipTariff = value) }
+        calculateMembershipFee()
+    }
+
+    fun toggleMembershipNumberLock() {
+        val s = _uiState.value
+        val locked = !s.isMembershipNumberLocked
+        if (locked && s.membershipPlotNumber != prevMembershipNumber) saveMembershipData()
+        else prevMembershipNumber = s.membershipPlotNumber
+        _uiState.update { it.copy(isMembershipNumberLocked = locked) }
+    }
+
+    fun toggleMembershipAreaLock() {
+        val s = _uiState.value
+        val locked = !s.isMembershipAreaLocked
+        if (locked && s.membershipPlotArea != prevMembershipArea) saveMembershipData()
+        else prevMembershipArea = s.membershipPlotArea
+        _uiState.update { it.copy(isMembershipAreaLocked = locked) }
+    }
+
+    fun toggleMembershipTariffLock() {
+        val s = _uiState.value
+        val locked = !s.isMembershipTariffLocked
+        if (locked && s.membershipTariff != prevMembershipTariff) saveMembershipData()
+        else prevMembershipTariff = s.membershipTariff
+        _uiState.update { it.copy(isMembershipTariffLocked = locked) }
+    }
+
+    private fun saveMembershipData() {
+        val s = _uiState.value
+        val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
+
+        prefs.edit()
+            .putString(keyNum, s.membershipPlotNumber)
+            .putString(keyArea, s.membershipPlotArea)
+            .putString(keyTariff, s.membershipTariff)
+            .apply()
+
+        promptMembershipEmail()
+    }
+
+    private fun promptMembershipEmail() {
+        val s = _uiState.value
+        val monthName = getPreviousMonthName()
+        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
+
+        val emailBody = "Обновление членского взноса.\n" +
+                "Участок: ${s.membershipPlotNumber}\n" +
+                "Период: за $monthName $year\n" +
+                "Площадь: ${s.membershipPlotArea} сот.\n" +
+                "Тариф: ${s.membershipTariff} ₽/сот.\n" +
+                "Сумма: ${s.membershipFeeTotal}"
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "message/rfc822"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
+            putExtra(Intent.EXTRA_SUBJECT, "Обновление взноса уч. ${s.membershipPlotNumber}")
+            putExtra(Intent.EXTRA_TEXT, emailBody)
+        }
+
+        val chooser = Intent.createChooser(intent, "Отправить данные")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+        Toast.makeText(context, "💾 Сохранено!", Toast.LENGTH_SHORT).show()
+    }
+
+    fun copyMembershipToClipboard() {
+        val s = _uiState.value
+        val monthName = getPreviousMonthName()
+        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
+
+        val text = "Членский взнос уч.${s.membershipPlotNumber} за $monthName $year"
+
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("membership", text))
+        Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun calculateMembershipFee() {
+        val s = _uiState.value
+        val area = s.membershipPlotArea.toFloatOrNull() ?: 0f
+        val tariff = s.membershipTariff.toFloatOrNull() ?: 0f
+        _uiState.update {
+            it.copy(membershipFeeTotal = String.format(Locale.getDefault(), "%.2f ₽", area * tariff))
+        }
+    }
+
+    private fun getPreviousMonthName(): String {
+        val calendar = Calendar.getInstance()
+        calendar.add(Calendar.MONTH, -1)
+        return listOf(
+            "январь", "февраль", "март", "апрель", "май", "июнь",
+            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
+        )[calendar.get(Calendar.MONTH)]
+    }
 }
