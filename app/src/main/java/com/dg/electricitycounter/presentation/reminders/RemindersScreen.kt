@@ -25,11 +25,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dg.electricitycounter.NotificationHelper
 import com.dg.electricitycounter.PermissionHelper
 import com.dg.electricitycounter.ReminderScheduler
+import com.dg.electricitycounter.data.AppDatabase
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.*
 import java.util.Locale
-import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,14 +43,9 @@ fun RemindersScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-
-    // ✅ СОЗДАЕМ SCHEDULER ОДИН РАЗ
     val scheduler = remember { ReminderScheduler(context) }
-
-    // ✅ ОТДЕЛЬНОЕ СОСТОЯНИЕ ДЛЯ ВРЕМЕНИ БУДИЛЬНИКА
     var nextAlarmTime by remember { mutableStateOf<Long?>(null) }
 
-    // ✅ ПЕРИОДИЧЕСКИЙ ОПРОС ПЛАНИРОВЩИКА (каждые 2 секунды)
     LaunchedEffect(uiState.isReminderEnabled, scheduler) {
         if (uiState.isReminderEnabled) {
             while (true) {
@@ -58,7 +57,6 @@ fun RemindersScreen(
         }
     }
 
-    // Показываем сообщения
     LaunchedEffect(uiState.error) {
         uiState.error?.let { error ->
             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
@@ -73,7 +71,6 @@ fun RemindersScreen(
         }
     }
 
-    // Лончер для импорта файла
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
@@ -82,7 +79,6 @@ fun RemindersScreen(
                 val inputStream = context.contentResolver.openInputStream(it)
                 val content = inputStream?.bufferedReader()?.readText()
                 inputStream?.close()
-
                 if (!content.isNullOrEmpty()) {
                     viewModel.importHistory(content)
                 } else {
@@ -97,9 +93,7 @@ fun RemindersScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = {
-                    Text("🔔 НАПОМИНАНИЯ", fontSize = 18.sp)
-                },
+                title = { Text("🔔 НАПОМИНАНИЯ", fontSize = 18.sp) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
@@ -125,7 +119,6 @@ fun RemindersScreen(
                     modifier = Modifier.padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    // ЗАГОЛОВОК И ПЕРЕКЛЮЧАТЕЛЬ
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -138,8 +131,6 @@ fun RemindersScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF1E3C72)
                             )
-
-                            // ✅ СТАТУС: реальное время из планировщика (обновляется!)
                             Text(
                                 text = if (uiState.isReminderEnabled) {
                                     nextAlarmTime?.let { time ->
@@ -152,6 +143,7 @@ fun RemindersScreen(
                                 color = if (uiState.isReminderEnabled) Color(0xFF28A745) else Color.Gray
                             )
                         }
+                        val scope = rememberCoroutineScope()
                         Switch(
                             checked = uiState.isReminderEnabled,
                             onCheckedChange = { enabled ->
@@ -159,28 +151,28 @@ fun RemindersScreen(
 
                                 if (enabled) {
                                     if (PermissionHelper.hasNotificationPermission(context)) {
-                                        scheduler.scheduleReminder()
-                                        Toast.makeText(
-                                            context,
-                                            "✅ Напоминания включены!",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        scope.launch(Dispatchers.IO) {
+                                            try {
+                                                val db = AppDatabase.getInstance(context)
+                                                val lastDateMillis = db.readingDao().getLatest()?.date
+                                                android.util.Log.d("REMINDER_FIX", " Читаю дату из БД: $lastDateMillis")
+
+                                                withContext(Dispatchers.Main) {
+                                                    scheduler.scheduleReminder(lastDateMillis)
+                                                }
+                                            } catch (e: Exception) {
+                                                android.util.Log.e("REMINDER_FIX", "❌ Ошибка чтения БД", e)
+                                                withContext(Dispatchers.Main) {
+                                                    scheduler.scheduleReminder() // фоллбэк только при ошибке
+                                                }
+                                            }
+                                        }
                                     } else {
                                         PermissionHelper.requestNotificationPermissionIfNeeded(context)
-                                        Toast.makeText(
-                                            context,
-                                            "📱 Разрешите уведомления в настройках",
-                                            Toast.LENGTH_LONG
-                                        ).show()
                                         viewModel.toggleReminder(false)
                                     }
                                 } else {
                                     scheduler.cancelReminders()
-                                    Toast.makeText(
-                                        context,
-                                        "🔕 Напоминания выключены",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
                                 }
                             }
                         )

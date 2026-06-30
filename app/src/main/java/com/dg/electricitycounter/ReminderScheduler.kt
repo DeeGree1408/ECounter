@@ -7,14 +7,12 @@ import android.content.Intent
 import android.os.Build
 import android.provider.Settings
 import android.util.Log
-import java.util.*
 import android.widget.Toast
 import java.text.SimpleDateFormat
+import java.util.*
 import java.util.Locale
 
-
 class ReminderScheduler(private val context: Context) {
-
     private val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
     private val TAG = "ReminderScheduler"
 
@@ -24,36 +22,83 @@ class ReminderScheduler(private val context: Context) {
     }
 
     /**
-     * Планирует напоминание на 24 число текущего или следующего месяца в 12:00
+     * Планирует напоминание.
+     * @param lastReadingDateMillis Дата последней передачи (timestamp). Если null — fallback на сегодня.
      */
-    fun scheduleReminder() {
+    fun scheduleReminder(lastReadingDateMillis: Long? = null) {
         Log.d(TAG, "=== scheduleReminder START ===")
+        Log.d(TAG, "🔍 lastReadingDateMillis=$lastReadingDateMillis")
 
-        // Проверяем разрешения
         if (!canScheduleExactAlarms()) {
             Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
             requestExactAlarmPermission()
             return
         }
 
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = System.currentTimeMillis()
-            set(Calendar.HOUR_OF_DAY, 12)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
+        val now = Calendar.getInstance()
+        val currentDay = now.get(Calendar.DAY_OF_MONTH)
+        val currentHour = now.get(Calendar.HOUR_OF_DAY)
+        val triggerCalendar = Calendar.getInstance()
 
-            // Если сегодня >= 24, то планируем на следующий месяц
-            if (get(Calendar.DAY_OF_MONTH) >= 24) {
-                add(Calendar.MONTH, 1)
+        // === ЛОГИКА РАСЧЁТА ===
+        if (lastReadingDateMillis != null) {
+            // Есть дата из БД: сравниваем месяц
+            val lastCal = Calendar.getInstance().apply { timeInMillis = lastReadingDateMillis }
+            val lastMonth = lastCal.get(Calendar.MONTH)
+            val currentMonth = now.get(Calendar.MONTH)
+
+            if (lastMonth != currentMonth) {
+                // Ввод был в прошлом цикле → напоминаем СЕГОДНЯ в 12:00:00
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    now.get(Calendar.DAY_OF_MONTH),
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                if (currentHour >= 12) {
+                    triggerCalendar.add(Calendar.DAY_OF_MONTH, 1)
+                }
+                Log.d(TAG, "📅 Логика А: ввод в прошлом цикле → ${triggerCalendar.time}")
+            } else {
+                // Ввод уже был в этом месяце → ждём следующего цикла (24 число)
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    24,
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                triggerCalendar.add(Calendar.MONTH, 1)
+                Log.d(TAG, "📅 Логика Б: ввод в этом месяце → ${triggerCalendar.time}")
             }
-            set(Calendar.DAY_OF_MONTH, 24)
+        } else {
+            // Нет даты (fallback): считаем от текущей даты
+            if (currentDay >= 24 || currentDay <= 3) {
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    24,
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                triggerCalendar.add(Calendar.MONTH, 1)
+                Log.d(TAG, "📅 Логика В: нет данных, окно ввода → ${triggerCalendar.time}")
+            } else {
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    24,
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                Log.d(TAG, "📅 Логика Г: нет данных, 4-23 число → ${triggerCalendar.time}")
+            }
         }
 
-        val triggerTime = calendar.timeInMillis
+        val triggerTime = triggerCalendar.timeInMillis
         val pendingIntent = createPendingIntent()
 
-        // ГЛАВНОЕ ИЗМЕНЕНИЕ: используем setAlarmClock() для Huawei
         if (isHuaweiDevice()) {
             Log.d(TAG, "📱 Обнаружен Huawei - используем setAlarmClock()")
             scheduleWithAlarmClock(triggerTime, pendingIntent)
@@ -62,76 +107,48 @@ class ReminderScheduler(private val context: Context) {
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
 
-        // ✅ Сохраняем время будильника локально
         saveNextAlarmTime(triggerTime)
-
-        Log.d(TAG, "✅ Напоминание запланировано на: ${calendar.time}")
-        Log.d(TAG, "⏰ Timestamp: $triggerTime (через ${(triggerTime - System.currentTimeMillis()) / 1000 / 60} минут)")
+        Log.d(TAG, "✅ Напоминание на: ${triggerCalendar.time}")
         Log.d(TAG, "=== scheduleReminder END ===")
     }
 
-    /**
-     * Планирует ежедневные напоминания с 25 числа
-     */
     fun scheduleDailyReminders() {
         Log.d(TAG, "=== scheduleDailyReminders START ===")
-
         if (!canScheduleExactAlarms()) {
             Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
             return
         }
-
         val calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             set(Calendar.HOUR_OF_DAY, 12)
             set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0)
             set(Calendar.MILLISECOND, 0)
-
-            // Если сегодня до 12:00, то сегодня в 12:00, иначе завтра
             if (get(Calendar.HOUR_OF_DAY) >= 12) {
                 add(Calendar.DAY_OF_MONTH, 1)
             }
         }
-
         val triggerTime = calendar.timeInMillis
         val pendingIntent = createPendingIntent()
-
         if (isHuaweiDevice()) {
-            Log.d(TAG, "📱 Huawei - ежедневное с setAlarmClock()")
             scheduleWithAlarmClock(triggerTime, pendingIntent)
         } else {
-            Log.d(TAG, "📱 Ежедневное с setExactAndAllowWhileIdle()")
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
-
-        // ✅ Сохраняем время будильника локально
         saveNextAlarmTime(triggerTime)
-
         Log.d(TAG, "✅ Ежедневное напоминание на: ${calendar.time}")
         Log.d(TAG, "=== scheduleDailyReminders END ===")
     }
 
-    /**
-     * Отменяет все напоминания
-     */
     fun cancelReminders() {
         Log.d(TAG, "🛑 cancelReminders")
         val pendingIntent = createPendingIntent()
         alarmManager.cancel(pendingIntent)
         pendingIntent.cancel()
-
-        // ✅ Очищаем сохраненное время
         clearNextAlarmTime()
-
         Log.d(TAG, "✅ Напоминания отменены")
     }
 
-    // ========== ПРИВАТНЫЕ МЕТОДЫ ==========
-
-    /**
-     * Создает PendingIntent для ReminderReceiver
-     */
     private fun createPendingIntent(): PendingIntent {
         val intent = Intent(context, ReminderReceiver::class.java).apply {
             action = ACTION_REMINDER
@@ -144,16 +161,8 @@ class ReminderScheduler(private val context: Context) {
         return PendingIntent.getBroadcast(context, REQUEST_CODE_REMINDER, intent, flags)
     }
 
-    /**
-     * Планирует с setAlarmClock() - для Huawei
-     * Показывает иконку в статус-баре, наивысший приоритет
-     */
     private fun scheduleWithAlarmClock(triggerTime: Long, pendingIntent: PendingIntent) {
-        val alarmClockInfo = AlarmManager.AlarmClockInfo(
-            triggerTime,
-            pendingIntent // showIntent - открывает приложение при нажатии на иконку
-        )
-
+        val alarmClockInfo = AlarmManager.AlarmClockInfo(triggerTime, pendingIntent)
         try {
             alarmManager.setAlarmClock(alarmClockInfo, pendingIntent)
             Log.d(TAG, "✅ setAlarmClock() успешно")
@@ -162,23 +171,12 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Планирует с setExactAndAllowWhileIdle() - для обычных устройств
-     */
     private fun scheduleWithExactAlarm(triggerTime: Long, pendingIntent: PendingIntent) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTime,
-                    pendingIntent
-                )
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             } else {
-                alarmManager.setExact(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerTime,
-                    pendingIntent
-                )
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerTime, pendingIntent)
             }
             Log.d(TAG, "✅ setExactAndAllowWhileIdle() успешно")
         } catch (e: Exception) {
@@ -186,9 +184,6 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Проверяет, Huawei ли это устройство
-     */
     fun isHuaweiDevice(): Boolean {
         val manufacturer = Build.MANUFACTURER.lowercase()
         val isHuawei = manufacturer.contains("huawei") || manufacturer.contains("honor")
@@ -196,9 +191,6 @@ class ReminderScheduler(private val context: Context) {
         return isHuawei
     }
 
-    /**
-     * Проверяет разрешение SCHEDULE_EXACT_ALARM (Android 12+)
-     */
     fun canScheduleExactAlarms(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val canSchedule = alarmManager.canScheduleExactAlarms()
@@ -209,9 +201,6 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Открывает настройки разрешения SCHEDULE_EXACT_ALARM
-     */
     fun requestExactAlarmPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             try {
@@ -225,9 +214,6 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Проверяет, находится ли приложение в исключениях батареи
-     */
     fun isIgnoringBatteryOptimizations(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val powerManager = context.getSystemService(Context.POWER_SERVICE) as android.os.PowerManager
@@ -239,9 +225,6 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Открывает настройки оптимизации батареи
-     */
     fun requestIgnoreBatteryOptimizations() {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -255,15 +238,10 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Для Huawei - открывает настройки автозапуска (не стандартный Android)
-     */
     fun openHuaweiSettings() {
         try {
             val intent = Intent().apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-
-                // Попытка 1: Настройки запуска
                 component = android.content.ComponentName(
                     "com.huawei.systemmanager",
                     "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity"
@@ -273,14 +251,10 @@ class ReminderScheduler(private val context: Context) {
             Log.d(TAG, "🚀 Открыты настройки Huawei")
         } catch (e: Exception) {
             Log.e(TAG, "❌ Не удалось открыть настройки Huawei: ${e.message}")
-            // Fallback - открываем общие настройки приложения
             openAppSettings()
         }
     }
 
-    /**
-     * Открывает настройки приложения
-     */
     private fun openAppSettings() {
         try {
             val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -294,12 +268,7 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Получает время следующего срабатывания (для отображения)
-     * Сначала пытается получить из AlarmManager, потом из локального хранилища
-     */
     fun getNextAlarmTime(): Long? {
-        // Попытка 1: Получить из системы (работает только на Android 12+)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val nextAlarmInfo = alarmManager.nextAlarmClock
             nextAlarmInfo?.triggerTime?.also {
@@ -307,11 +276,8 @@ class ReminderScheduler(private val context: Context) {
                 return it
             }
         }
-
-        // Попытка 2: Получить из локального хранилища
         val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
         val savedTime = prefs.getLong("next_alarm_time", 0L)
-
         return if (savedTime > System.currentTimeMillis()) {
             Log.d(TAG, "💾 Следующий будильник из памяти: ${Date(savedTime)}")
             savedTime
@@ -321,64 +287,42 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    /**
-     * Сохраняет время следующего будильника локально
-     */
     private fun saveNextAlarmTime(time: Long) {
         val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
         prefs.edit().putLong("next_alarm_time", time).apply()
         Log.d(TAG, "💾 Сохранено время будильника: ${Date(time)}")
     }
 
-    /**
-     * Очищает сохраненное время будильника
-     */
     private fun clearNextAlarmTime() {
         val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
         prefs.edit().remove("next_alarm_time").apply()
         Log.d(TAG, "🗑️ Время будильника очищено")
     }
 
-    /**
-     * 🧪 ТЕСТОВЫЙ МЕТОД: Установить будильник через N минут
-     * Для проверки работы уведомлений
-     */
     fun scheduleTestAlarm(minutesFromNow: Int) {
         Log.d(TAG, "🧪=== scheduleTestAlarm START ===")
         Log.d(TAG, "🧪 Будильник через $minutesFromNow минут")
-
         if (!canScheduleExactAlarms()) {
             Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
             Toast.makeText(context, "❌ Нет разрешения на точные будильники", Toast.LENGTH_LONG).show()
             return
         }
-
         val calendar = Calendar.getInstance().apply {
             timeInMillis = System.currentTimeMillis()
             add(Calendar.MINUTE, minutesFromNow)
         }
-
         val triggerTime = calendar.timeInMillis
         val pendingIntent = createPendingIntent()
-
         if (isHuaweiDevice()) {
-            Log.d(TAG, "🧪 Huawei - используем setAlarmClock()")
             scheduleWithAlarmClock(triggerTime, pendingIntent)
         } else {
-            Log.d(TAG, "🧪 Обычное устройство - используем setExactAndAllowWhileIdle()")
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
-
-        // ✅ Сохраняем время тестового будильника
         saveNextAlarmTime(triggerTime)
-
         val dateFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
         val message = "🧪 Тестовый будильник установлен на ${dateFormat.format(calendar.time)}"
-
         Toast.makeText(context, message, Toast.LENGTH_LONG).show()
-
         Log.d(TAG, "✅ Тестовый будильник на: ${calendar.time}")
         Log.d(TAG, "🧪=== scheduleTestAlarm END ===")
     }
-
 }

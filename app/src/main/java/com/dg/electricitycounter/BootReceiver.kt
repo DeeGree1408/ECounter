@@ -4,11 +4,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action
-
         Log.d("BootReceiver", "📱 Получено событие: $action")
 
         if (action == Intent.ACTION_BOOT_COMPLETED ||
@@ -17,22 +20,33 @@ class BootReceiver : BroadcastReceiver() {
 
             Log.d("BootReceiver", "📱 Устройство перезагружено, проверяем напоминания...")
 
-            // ✅ ИСПРАВЛЕНО: используем правильное имя SharedPreferences
             val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
             val isReminderEnabled = prefs.getBoolean("reminder_enabled", false)
 
             Log.d("BootReceiver", "🔍 reminder_enabled = $isReminderEnabled")
 
             if (isReminderEnabled) {
-                Log.d("BootReceiver", "✅ Напоминания были включены - восстанавливаем будильник!")
+                Log.d("BootReceiver", "✅ Напоминания включены - восстанавливаем будильник!")
 
-                // Восстанавливаем будильник
-                val scheduler = ReminderScheduler(context)
-                scheduler.scheduleReminder()
+                // Запускаем корутину для работы с БД (IO поток)
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val db = com.dg.electricitycounter.data.AppDatabase.getInstance(context)
+                        val lastDateMillis = db.readingDao().getLatest()?.date
 
-                Log.d("BootReceiver", "🔔 Будильник восстановлен после перезагрузки")
+                        // Переключаемся на Main поток для безопасного вызова планировщика
+                        withContext(Dispatchers.Main) {
+                            ReminderScheduler(context).scheduleReminder(lastDateMillis)
+                            Log.d("BootReceiver", "🔔 Будильник восстановлен (дата БД: ${lastDateMillis ?: "null"})")
+                        }
+                    } catch (e: Exception) {
+                        Log.e("BootReceiver", "❌ Ошибка восстановления будильника", e)
+                        // Фоллбэк: если БД недоступна, планируем по текущей дате
+                        ReminderScheduler(context).scheduleReminder()
+                    }
+                }
             } else {
-                Log.d("BootReceiver", "🔕 Напоминания были выключены - ничего не делаем")
+                Log.d("BootReceiver", "🔕 Напоминания выключены")
             }
         }
     }

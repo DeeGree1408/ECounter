@@ -31,10 +31,10 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "ecounter_database" // ← проверь, как называется твоя БД в старом коде
+                    "electricity_counter_db" // ← ИСПРАВЛЕНО! Было "ecounter_database"
                 )
-                .fallbackToDestructiveMigration() // ← временно для ветки разработки
-                .build()
+                    .fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }
