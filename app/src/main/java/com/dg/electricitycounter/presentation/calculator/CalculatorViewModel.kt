@@ -257,7 +257,7 @@ class CalculatorViewModel @Inject constructor(
                 val emailIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "message/rfc822"
                     putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                    putExtra(Intent.EXTRA_SUBJECT, "Показания счётчика")
+                    putExtra(Intent.EXTRA_SUBJECT, "Показания счётчика ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}")
                     putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.")
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
