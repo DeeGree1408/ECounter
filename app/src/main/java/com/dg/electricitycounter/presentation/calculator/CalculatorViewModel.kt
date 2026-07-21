@@ -241,7 +241,7 @@ class CalculatorViewModel @Inject constructor(
 
                 val historyText = readings.joinToString("\n") { reading ->
                     val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(reading.date))
-                    "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format("%.2f", reading.tariff)} ${String.format("%.2f", reading.amount)}"
+                    "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format(Locale.getDefault(), "%.2f", reading.tariff)} ${String.format(Locale.getDefault(), "%.2f", reading.amount)}"
                 }
 
                 val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
@@ -266,7 +266,6 @@ class CalculatorViewModel @Inject constructor(
                 val chooser = Intent.createChooser(emailIntent, "Отправить историю")
                 chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(chooser)
-
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -277,9 +276,9 @@ class CalculatorViewModel @Inject constructor(
         return """
         📊 ПОКАЗАНИЯ ПЕРЕДАНЫ
         
-        📈 ИЗРАСХОДОВАНО: ${String.format("%.1f", reading.consumption)} кВт·ч
-        💰 ТАРИФ: ${String.format("%.2f", reading.tariff)} ₽/кВт·ч
-        🏦 СУММА К ОПЛАТЕ: ${String.format("%.2f", reading.amount)} ₽
+        📈 ИЗРАСХОДОВАНО: ${String.format(Locale.getDefault(), "%.1f", reading.consumption)} кВт·ч
+        💰 ТАРИФ: ${String.format(Locale.getDefault(), "%.2f", reading.tariff)} ₽/кВт·ч
+        🏦 СУММА К ОПЛАТЕ: ${String.format(Locale.getDefault(), "%.2f", reading.amount)} ₽
         
         📅 Дата передачи: ${reading.date.formatToDisplay()}
         🔄 Показания: ${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}
@@ -294,7 +293,7 @@ class CalculatorViewModel @Inject constructor(
     }
 
     // ==========================================
-    // 💰 ЧЛЕНСКИЙ ВЗНОС (ЧВ)
+    //  ЧЛЕНСКИЙ ВЗНОС (ЧВ)
     // ==========================================
     fun loadMembershipSettings() {
         val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
@@ -368,20 +367,27 @@ class CalculatorViewModel @Inject constructor(
 
     private fun promptMembershipEmail() {
         val s = _uiState.value
-        val monthName = getPreviousMonthName()
-        val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
 
-        val emailBody = "Обновление членского взноса.\n" +
-                "Участок: ${s.membershipPlotNumber}\n" +
-                "Период: за $monthName $year\n" +
-                "Площадь: ${s.membershipPlotArea} сот.\n" +
-                "Тариф: ${s.membershipTariff} ₽/сот.\n" +
-                "Сумма: ${s.membershipFeeTotal}"
+        // 1. Формируем дату: последнее число текущего месяца
+        val calendar = Calendar.getInstance()
+        calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
+        val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(calendar.time)
+
+        // 2. Подготовка данных
+        val area = s.membershipPlotArea.replace(".", ",")
+        val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim() // Оставляем только цифры
+        val sum = s.membershipFeeTotal
+            .replace("₽", "")
+            .replace(" ", "")
+            .replace(".", ",")
+
+        // 3. Формируем строку в нужном формате
+        val emailBody = "$dateStr $area $tariff $sum"
 
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "message/rfc822"
             putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-            putExtra(Intent.EXTRA_SUBJECT, "Обновление взноса уч. ${s.membershipPlotNumber}")
+            putExtra(Intent.EXTRA_SUBJECT, "Членский взнос уч. ${s.membershipPlotNumber}")
             putExtra(Intent.EXTRA_TEXT, emailBody)
         }
 
