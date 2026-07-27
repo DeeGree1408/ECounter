@@ -20,6 +20,7 @@ import com.dg.electricitycounter.domain.usecase.GetLatestReadingUseCase
 import com.dg.electricitycounter.util.formatToDisplay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,6 +28,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext  // ✅ ДОБАВЛЕНО
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -222,7 +224,7 @@ class CalculatorViewModel @Inject constructor(
         }
         preferencesHelper.setPreviousLocked(true)
         stopRemindersIfEnabled()
-        exportAndSendHistory()
+        createAndSendUnifiedBackup()
     }
 
     private fun stopRemindersIfEnabled() {
@@ -233,54 +235,79 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
-    private fun exportAndSendHistory() {
-        viewModelScope.launch {
+    // ✅ ОБЪЕДИНЁННЫЙ ЭКСПОРТ: один файл, правильные секции, без дублей
+    private fun createAndSendUnifiedBackup() {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
+                val ruLocale = Locale("ru", "RU")
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", ruLocale).format(Date())
+                val fileName = "backup_full_$timestamp.txt"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val file = File(downloadsDir, fileName)
+
+                // 1. Секция ЭЛЕКТРИЧЕСТВА (полная история из БД)
                 val readings = getAllReadingsUseCase().first()
-                if (readings.isEmpty()) return@launch
+                val electricitySection = if (readings.isNotEmpty()) {
+                    "#ELECTRICITY\n" + readings.joinToString("\n") { r ->
+                        val date = SimpleDateFormat("dd.MM.yyyy", ruLocale).format(Date(r.date))
+                        "$date ${r.currentReading.toInt()} ${r.consumption.toInt()} ${String.format(ruLocale, "%.2f", r.tariff)} ${String.format(ruLocale, "%.2f", r.amount)}"
+                    }
+                } else "#ELECTRICITY\n"
 
-                val historyText = readings.joinToString("\n") { reading ->
-                    val date = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(reading.date))
-                    "$date ${reading.currentReading.toInt()} ${reading.consumption.toInt()} ${String.format(Locale.getDefault(), "%.2f", reading.tariff)} ${String.format(Locale.getDefault(), "%.2f", reading.amount)}"
+                // 2. Секция ЧЛЕНСКОГО ВЗНОСА (текущие настройки)
+                val s = _uiState.value
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
                 }
+                val feeDate = SimpleDateFormat("dd.MM.yyyy", ruLocale).format(calendar.time)
+                val area = s.membershipPlotArea.replace(".", ",")
+                val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
+                val sum = s.membershipFeeTotal.replace("₽", "").replace(" ", "").replace(".", ",")
+                val membershipSection = "\n#MEMBERSHIP_FEE\n$feeDate $area $tariff $sum"
 
-                val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
-                val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
-                file.writeText(historyText, Charsets.UTF_8)
+                // 3. Запись файла
+                val content = electricitySection + membershipSection
+                file.writeText(content, Charsets.UTF_8)
 
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-
-                val emailIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "message/rfc822"
-                    putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                    putExtra(Intent.EXTRA_SUBJECT, "Показания счётчика ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}")
-                    putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.")
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                // 4. Отправка письма
+                withContext(Dispatchers.Main) {  // ✅ Теперь с импортом
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "message/rfc822"
+                        putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
+                        putExtra(Intent.EXTRA_SUBJECT, "Бэкап: ЭЭ + ЧВ ($timestamp)")
+                        putExtra(Intent.EXTRA_TEXT, "Данные во вложении.")
+                        putExtra(Intent.EXTRA_STREAM, uri)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Отправить бэкап").apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    })
+                    Toast.makeText(context, "✅ Файл сохранён: $fileName", Toast.LENGTH_LONG).show()
                 }
-
-                val chooser = Intent.createChooser(emailIntent, "Отправить историю")
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(chooser)
             } catch (e: Exception) {
+                withContext(Dispatchers.Main) {  // ✅ Теперь с импортом
+                    Toast.makeText(context, "❌ Ошибка экспорта: ${e.message}", Toast.LENGTH_LONG).show()
+                }
                 e.printStackTrace()
             }
         }
     }
 
     private fun formatResult(reading: Reading): String {
+        val ru = Locale("ru", "RU")
         return """
         📊 ПОКАЗАНИЯ ПЕРЕДАНЫ
         
-        📈 ИЗРАСХОДОВАНО: ${String.format(Locale.getDefault(), "%.1f", reading.consumption)} кВт·ч
-        💰 ТАРИФ: ${String.format(Locale.getDefault(), "%.2f", reading.tariff)} ₽/кВт·ч
-        🏦 СУММА К ОПЛАТЕ: ${String.format(Locale.getDefault(), "%.2f", reading.amount)} ₽
+        📈 ИЗРАСХОДОВАНО: ${String.format(ru, "%.1f", reading.consumption)} кВт·ч
+        💰 ТАРИФ: ${String.format(ru, "%.2f", reading.tariff)} ₽/кВт·ч
+        🏦 СУММА К ОПЛАТЕ: ${String.format(ru, "%.2f", reading.amount)} ₽
         
-         Дата передачи: ${reading.date.formatToDisplay()}
+        📅 Дата передачи: ${reading.date.formatToDisplay()}
         🔄 Показания: ${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}
         
         ✅ Предыдущие показания обновлены | ✅ Запись в истории | 📧 Отправлено
@@ -293,7 +320,7 @@ class CalculatorViewModel @Inject constructor(
     }
 
     // ==========================================
-    //  ЧЛЕНСКИЙ ВЗНОС (ЧВ)
+    // 💰 ЧЛЕНСКИЙ ВЗНОС (ЧВ)
     // ==========================================
     fun loadMembershipSettings() {
         val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
@@ -328,27 +355,32 @@ class CalculatorViewModel @Inject constructor(
         calculateMembershipFee()
     }
 
+    // ✅ ЗАМКИ: сохраняем ТОЛЬКО если данные изменились + только для Тарифа
     fun toggleMembershipNumberLock() {
         val s = _uiState.value
         val locked = !s.isMembershipNumberLocked
-        if (locked && s.membershipPlotNumber != prevMembershipNumber) saveMembershipData()
-        else prevMembershipNumber = s.membershipPlotNumber
+        // Просто меняем состояние, без сохранения
         _uiState.update { it.copy(isMembershipNumberLocked = locked) }
     }
 
     fun toggleMembershipAreaLock() {
         val s = _uiState.value
         val locked = !s.isMembershipAreaLocked
-        if (locked && s.membershipPlotArea != prevMembershipArea) saveMembershipData()
-        else prevMembershipArea = s.membershipPlotArea
+        // Просто меняем состояние, без сохранения
         _uiState.update { it.copy(isMembershipAreaLocked = locked) }
     }
 
     fun toggleMembershipTariffLock() {
         val s = _uiState.value
         val locked = !s.isMembershipTariffLocked
-        if (locked && s.membershipTariff != prevMembershipTariff) saveMembershipData()
-        else prevMembershipTariff = s.membershipTariff
+
+        // Сохраняем ТОЛЬКО если: 1) замок закрывается И 2) тариф изменился
+        if (locked && s.membershipTariff != prevMembershipTariff) {
+            saveMembershipData()
+        }
+        // Обновляем "предыдущее" значение, чтобы следующий раз сравнивать с актуальным
+        prevMembershipTariff = s.membershipTariff
+
         _uiState.update { it.copy(isMembershipTariffLocked = locked) }
     }
 
@@ -362,70 +394,7 @@ class CalculatorViewModel @Inject constructor(
             .putString(keyTariff, s.membershipTariff)
             .apply()
 
-        promptMembershipEmail()
-    }
-
-    private fun promptMembershipEmail() {
-        viewModelScope.launch {
-            try {
-                val s = _uiState.value
-
-                // 1. Формируем дату: последнее число текущего месяца
-                val calendar = Calendar.getInstance().apply {
-                    set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
-                }
-                val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(calendar.time)
-
-                // 2. Подготовка данных
-                val area = s.membershipPlotArea.replace(".", ",")
-                val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
-                val sum = s.membershipFeeTotal
-                    .replace("₽", "")
-                    .replace(" ", "")
-                    .replace(".", ",")
-
-                // 3. Формируем строку для файла
-                val fileContent = "$dateStr $area $tariff $sum"
-
-                // 4. ✅ СОЗДАЁМ ФАЙЛ В DOWNLOADS
-                val fileName = "member_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
-                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-                val file = File(downloadsDir, fileName)
-                file.writeText(fileContent, Charsets.UTF_8)  // ← ЗАПИСЬ ФАЙЛА!
-
-                // 5. Создаём URI для вложения
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    context,
-                    "${context.packageName}.fileprovider",
-                    file
-                )
-
-                // 6. Отправляем письмо с вложением
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "message/rfc822"
-                    putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                    putExtra(Intent.EXTRA_SUBJECT, "Членский взнос уч. ${s.membershipPlotNumber}")
-                    putExtra(Intent.EXTRA_TEXT, "Данные о членском взносе во вложении.")
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                }
-
-                val chooser = Intent.createChooser(intent, "Отправить данные")
-                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(chooser)
-
-                // 7. Показываем путь к файлу
-                Toast.makeText(
-                    context,
-                    "✅ Файл сохранен: Downloads/$fileName",
-                    Toast.LENGTH_LONG
-                ).show()
-
-            } catch (e: Exception) {
-                Toast.makeText(context, " Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
-                e.printStackTrace()
-            }
-        }
+        createAndSendUnifiedBackup()
     }
 
     fun copyMembershipToClipboard() {
@@ -445,7 +414,7 @@ class CalculatorViewModel @Inject constructor(
         val area = s.membershipPlotArea.toFloatOrNull() ?: 0f
         val tariff = s.membershipTariff.toFloatOrNull() ?: 0f
         _uiState.update {
-            it.copy(membershipFeeTotal = String.format(Locale.getDefault(), "%.2f ₽", area * tariff))
+            it.copy(membershipFeeTotal = String.format(Locale("ru", "RU"), "%.2f ₽", area * tariff))
         }
     }
 

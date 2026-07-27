@@ -1,8 +1,10 @@
 package com.dg.electricitycounter.domain.usecase
 
+import android.content.Context
 import com.dg.electricitycounter.data.local.PreferencesHelper
 import com.dg.electricitycounter.domain.model.Reading
 import com.dg.electricitycounter.domain.repository.ReadingRepository
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import java.text.SimpleDateFormat
@@ -11,112 +13,95 @@ import javax.inject.Inject
 
 class ImportHistoryUseCase @Inject constructor(
     private val repository: ReadingRepository,
-    private val preferencesHelper: PreferencesHelper
+    private val preferencesHelper: PreferencesHelper,
+    @ApplicationContext private val context: Context
 ) {
     operator fun invoke(content: String): Flow<Result<Int>> = flow {
         try {
             val lines = content.trim().split("\n")
             val readings = mutableListOf<Reading>()
-            var errorCount = 0
-            
-            // Проверяем первую строку на метаданные
-            var startIndex = 0
-            if (lines.isNotEmpty() && lines[0].startsWith("META|")) {
-                parseMetadata(lines[0])
-                startIndex = 1
-            }
-            
-            // Парсим записи
-            for (i in startIndex until lines.size) {
-                val line = lines[i]
-                val trimmedLine = line.trim()
-                if (trimmedLine.isEmpty()) continue
-                
-                try {
-                    val parts = trimmedLine.split("\\s+".toRegex())
-                    
-                    if (parts.size >= 5) {
-                        val dateStr = parts[0] // dd.MM.yyyy
-                        val current = parts[1].toDouble()
-                        val consumption = parts[2].toDouble()
-                        val tariff = parts[3].replace(',', '.').toDouble()
-                        val amount = parts[4].replace(',', '.').toDouble()
-                        val previous = current - consumption
-                        
-                        val timestamp = parseDate(dateStr)
-                        
-                        readings.add(
-                            Reading(
-                                date = timestamp,
-                                previousReading = previous,
-                                currentReading = current,
-                                consumption = consumption,
-                                tariff = tariff,
-                                amount = amount,
-                                address = "уч.143а"
-                            )
-                        )
-                    } else {
-                        errorCount++
+            var mode = Mode.ELECTRICITY
+            var importedCount = 0
+
+            // Временные переменные для ЧВ
+            var feeArea: String? = null
+            var feeTariff: String? = null
+
+            for (line in lines) {
+                val trimmed = line.trim()
+                if (trimmed.isEmpty()) continue
+
+                when {
+                    trimmed == "#ELECTRICITY" -> mode = Mode.ELECTRICITY
+                    trimmed == "#MEMBERSHIP_FEE" -> mode = Mode.MEMBERSHIP_FEE
+                    else -> {
+                        val parts = trimmed.split("\\s+".toRegex())
+                        when (mode) {
+                            Mode.ELECTRICITY -> {
+                                if (parts.size >= 5) {
+                                    try {
+                                        val dateStr = parts[0]
+                                        val current = parts[1].toDouble()
+                                        val consumption = parts[2].toDouble()
+                                        val tariff = parts[3].replace(',', '.').toDouble()
+                                        val amount = parts[4].replace(',', '.').toDouble()
+                                        val previous = current - consumption
+                                        val timestamp = parseDate(dateStr)
+                                        readings.add(Reading(
+                                            date = timestamp, previousReading = previous, currentReading = current,
+                                            consumption = consumption, tariff = tariff, amount = amount, address = "уч.143а"
+                                        ))
+                                    } catch (e: Exception) { /* пропускаем битые строки */ }
+                                }
+                            }
+                            Mode.MEMBERSHIP_FEE -> {
+                                if (parts.size >= 4) {
+                                    try {
+                                        // Формат: 31.07.2026 6,94 280 1943,20
+                                        feeArea = parts[1].replace(',', '.')
+                                        feeTariff = parts[2].replace(',', '.')
+                                    } catch (e: Exception) { /* пропускаем */ }
+                                }
+                            }
+                        }
                     }
-                } catch (e: Exception) {
-                    errorCount++
                 }
             }
-            
+
+            // 1. Сохраняем ЭЭ в базу
             if (readings.isNotEmpty()) {
-                // Заменяем всю историю новыми данными
                 repository.importReadings(readings)
-                
-                // 🔧 ИЩЕМ ПЕРВОЕ ИЗМЕНЕНИЕ ТАРИФА
+                importedCount = readings.size
+
                 val latestTariff = readings.first().tariff
-                
-                // Находим последнюю (самую раннюю по дате) запись с этим тарифом
                 val firstTariffChange = readings.lastOrNull { it.tariff == latestTariff }
-                
                 if (firstTariffChange != null) {
-                    val tariffValue = String.format("%.2f", firstTariffChange.tariff).replace(',', '.')
-                    val tariffDate = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-                        .format(Date(firstTariffChange.date))
-                    
-                    // Сохраняем тариф и дату первого изменения
-                    preferencesHelper.saveTariff(tariffValue)
-                    preferencesHelper.saveTariffChangeDate(tariffDate)
+                    preferencesHelper.saveTariff(String.format("%.2f", firstTariffChange.tariff).replace(',', '.'))
+                    preferencesHelper.saveTariffChangeDate(
+                        SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(Date(firstTariffChange.date))
+                    )
                 }
-                
-                emit(Result.success(readings.size))
-            } else {
-                emit(Result.failure(Exception("Не найдено корректных записей (ошибок: $errorCount)")))
             }
-            
+
+            // 2. Сохраняем ЧВ в SharedPreferences
+            if (feeArea != null && feeTariff != null) {
+                val prefs = context.getSharedPreferences("membership_fee_prefs_v2", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putString("membership_area", feeArea)
+                    .putString("membership_tariff", feeTariff)
+                    .apply()
+            }
+
+            emit(Result.success(importedCount))
         } catch (e: Exception) {
             emit(Result.failure(e))
         }
     }
-    
-    private fun parseMetadata(metaLine: String) {
-        try {
-            // Формат: META|6.95|25.01.2026
-            val parts = metaLine.split("|")
-            if (parts.size >= 3) {
-                val tariff = parts[1]
-                val tariffDate = parts[2]
-                
-                // Сохраняем тариф и дату
-                preferencesHelper.saveTariff(tariff)
-                preferencesHelper.saveTariffChangeDate(tariffDate)
-            }
-        } catch (e: Exception) {
-            // Игнорируем ошибки парсинга метаданных
-        }
-    }
-    
+
     private fun parseDate(dateStr: String): Long {
-        return try {
-            val sdf = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
-            sdf.parse(dateStr)?.time ?: System.currentTimeMillis()
-        } catch (e: Exception) {
-            System.currentTimeMillis()
-        }
+        return try { SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).parse(dateStr)?.time ?: System.currentTimeMillis() }
+        catch (e: Exception) { System.currentTimeMillis() }
     }
+
+    enum class Mode { ELECTRICITY, MEMBERSHIP_FEE }
 }
