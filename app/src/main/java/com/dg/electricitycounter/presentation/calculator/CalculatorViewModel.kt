@@ -280,7 +280,7 @@ class CalculatorViewModel @Inject constructor(
         💰 ТАРИФ: ${String.format(Locale.getDefault(), "%.2f", reading.tariff)} ₽/кВт·ч
         🏦 СУММА К ОПЛАТЕ: ${String.format(Locale.getDefault(), "%.2f", reading.amount)} ₽
         
-        📅 Дата передачи: ${reading.date.formatToDisplay()}
+         Дата передачи: ${reading.date.formatToDisplay()}
         🔄 Показания: ${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}
         
         ✅ Предыдущие показания обновлены | ✅ Запись в истории | 📧 Отправлено
@@ -366,35 +366,66 @@ class CalculatorViewModel @Inject constructor(
     }
 
     private fun promptMembershipEmail() {
-        val s = _uiState.value
+        viewModelScope.launch {
+            try {
+                val s = _uiState.value
 
-        // 1. Формируем дату: последнее число текущего месяца
-        val calendar = Calendar.getInstance()
-        calendar.set(Calendar.DAY_OF_MONTH, calendar.getActualMaximum(Calendar.DAY_OF_MONTH))
-        val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(calendar.time)
+                // 1. Формируем дату: последнее число текущего месяца
+                val calendar = Calendar.getInstance().apply {
+                    set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                }
+                val dateStr = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault()).format(calendar.time)
 
-        // 2. Подготовка данных
-        val area = s.membershipPlotArea.replace(".", ",")
-        val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim() // Оставляем только цифры
-        val sum = s.membershipFeeTotal
-            .replace("₽", "")
-            .replace(" ", "")
-            .replace(".", ",")
+                // 2. Подготовка данных
+                val area = s.membershipPlotArea.replace(".", ",")
+                val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
+                val sum = s.membershipFeeTotal
+                    .replace("₽", "")
+                    .replace(" ", "")
+                    .replace(".", ",")
 
-        // 3. Формируем строку в нужном формате
-        val emailBody = "$dateStr $area $tariff $sum"
+                // 3. Формируем строку для файла
+                val fileContent = "$dateStr $area $tariff $sum"
 
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "message/rfc822"
-            putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-            putExtra(Intent.EXTRA_SUBJECT, "Членский взнос уч. ${s.membershipPlotNumber}")
-            putExtra(Intent.EXTRA_TEXT, emailBody)
+                // 4. ✅ СОЗДАЁМ ФАЙЛ В DOWNLOADS
+                val fileName = "member_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
+                val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+                val file = File(downloadsDir, fileName)
+                file.writeText(fileContent, Charsets.UTF_8)  // ← ЗАПИСЬ ФАЙЛА!
+
+                // 5. Создаём URI для вложения
+                val uri = androidx.core.content.FileProvider.getUriForFile(
+                    context,
+                    "${context.packageName}.fileprovider",
+                    file
+                )
+
+                // 6. Отправляем письмо с вложением
+                val intent = Intent(Intent.ACTION_SEND).apply {
+                    type = "message/rfc822"
+                    putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
+                    putExtra(Intent.EXTRA_SUBJECT, "Членский взнос уч. ${s.membershipPlotNumber}")
+                    putExtra(Intent.EXTRA_TEXT, "Данные о членском взносе во вложении.")
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+
+                val chooser = Intent.createChooser(intent, "Отправить данные")
+                chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(chooser)
+
+                // 7. Показываем путь к файлу
+                Toast.makeText(
+                    context,
+                    "✅ Файл сохранен: Downloads/$fileName",
+                    Toast.LENGTH_LONG
+                ).show()
+
+            } catch (e: Exception) {
+                Toast.makeText(context, " Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
+                e.printStackTrace()
+            }
         }
-
-        val chooser = Intent.createChooser(intent, "Отправить данные")
-        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(chooser)
-        Toast.makeText(context, "💾 Сохранено!", Toast.LENGTH_SHORT).show()
     }
 
     fun copyMembershipToClipboard() {
