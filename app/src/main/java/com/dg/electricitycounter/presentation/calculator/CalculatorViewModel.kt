@@ -28,7 +28,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext  // ✅ ДОБАВЛЕНО
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,11 +48,12 @@ class CalculatorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
 
-    // 💰 Членский взнос: ключи для SharedPreferences
+    // 💰 Членский взнос: ключи
     private val memPrefsName = "membership_fee_prefs_v2"
     private val keyNum = "membership_number"
     private val keyArea = "membership_area"
     private val keyTariff = "membership_tariff"
+    private val keyHistory = "membership_fee_history"
 
     private var prevMembershipNumber: String = ""
     private var prevMembershipArea: String = ""
@@ -224,7 +225,7 @@ class CalculatorViewModel @Inject constructor(
         }
         preferencesHelper.setPreviousLocked(true)
         stopRemindersIfEnabled()
-        createAndSendUnifiedBackup()
+        createUnifiedBackup()
     }
 
     private fun stopRemindersIfEnabled() {
@@ -235,47 +236,46 @@ class CalculatorViewModel @Inject constructor(
         }
     }
 
-    // ✅ ОБЪЕДИНЁННЫЙ ЭКСПОРТ: один файл, правильные секции, без дублей
-    private fun createAndSendUnifiedBackup() {
+    // ✅ ОБЪЕДИНЁННЫЙ БЭКАП: ЭЭ + История ЧВ
+    private fun createUnifiedBackup() {
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val ruLocale = Locale("ru", "RU")
-                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", ruLocale).format(Date())
+                val ru = Locale("ru", "RU")
+                val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", ru).format(Date())
                 val fileName = "backup_full_$timestamp.txt"
                 val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 val file = File(downloadsDir, fileName)
 
-                // 1. Секция ЭЛЕКТРИЧЕСТВА (полная история из БД)
+                // 1. Секция ЭЛЕКТРИЧЕСТВА
                 val readings = getAllReadingsUseCase().first()
                 val electricitySection = if (readings.isNotEmpty()) {
                     "#ELECTRICITY\n" + readings.joinToString("\n") { r ->
-                        val date = SimpleDateFormat("dd.MM.yyyy", ruLocale).format(Date(r.date))
-                        "$date ${r.currentReading.toInt()} ${r.consumption.toInt()} ${String.format(ruLocale, "%.2f", r.tariff)} ${String.format(ruLocale, "%.2f", r.amount)}"
+                        val date = SimpleDateFormat("dd.MM.yyyy", ru).format(Date(r.date))
+                        "$date ${r.currentReading.toInt()} ${r.consumption.toInt()} ${String.format(ru, "%.2f", r.tariff)} ${String.format(ru, "%.2f", r.amount)}"
                     }
                 } else "#ELECTRICITY\n"
 
-                // 2. Секция ЧЛЕНСКОГО ВЗНОСА (текущие настройки)
-                val s = _uiState.value
-                val calendar = Calendar.getInstance().apply {
-                    set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
+                // 2. Секция ЧЛЕНСКОГО ВЗНОСА (берём из сохранённой истории)
+                val history = getMembershipHistory()
+                val membershipSection = if (history.isNotBlank()) {
+                    "\n#MEMBERSHIP_FEE\n$history"
+                } else {
+                    // Fallback: если истории нет, генерируем текущие значения
+                    val s = _uiState.value
+                    val cal = Calendar.getInstance().apply {
+                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH)) // ✅ ИСПРАВЛЕНО
+                    }
+                    val date = SimpleDateFormat("dd.MM.yyyy", ru).format(cal.time)
+                    val area = s.membershipPlotArea.replace(".", ",")
+                    val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
+                    val sum = s.membershipFeeTotal.replace("₽", "").replace(" ", "").replace(".", ",")
+                    "\n#MEMBERSHIP_FEE\n$date $area $tariff $sum"
                 }
-                val feeDate = SimpleDateFormat("dd.MM.yyyy", ruLocale).format(calendar.time)
-                val area = s.membershipPlotArea.replace(".", ",")
-                val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
-                val sum = s.membershipFeeTotal.replace("₽", "").replace(" ", "").replace(".", ",")
-                val membershipSection = "\n#MEMBERSHIP_FEE\n$feeDate $area $tariff $sum"
 
-                // 3. Запись файла
-                val content = electricitySection + membershipSection
-                file.writeText(content, Charsets.UTF_8)
+                file.writeText(electricitySection + membershipSection, Charsets.UTF_8)
 
-                // 4. Отправка письма
-                withContext(Dispatchers.Main) {  // ✅ Теперь с импортом
-                    val uri = androidx.core.content.FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
+                withContext(Dispatchers.Main) {
+                    val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "message/rfc822"
                         putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
@@ -284,15 +284,11 @@ class CalculatorViewModel @Inject constructor(
                         putExtra(Intent.EXTRA_STREAM, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    context.startActivity(Intent.createChooser(intent, "Отправить бэкап").apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    })
+                    context.startActivity(Intent.createChooser(intent, "Отправить бэкап").apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) })
                     Toast.makeText(context, "✅ Файл сохранён: $fileName", Toast.LENGTH_LONG).show()
                 }
             } catch (e: Exception) {
-                withContext(Dispatchers.Main) {  // ✅ Теперь с импортом
-                    Toast.makeText(context, "❌ Ошибка экспорта: ${e.message}", Toast.LENGTH_LONG).show()
-                }
+                withContext(Dispatchers.Main) { Toast.makeText(context, "❌ Ошибка: ${e.message}", Toast.LENGTH_LONG).show() }
                 e.printStackTrace()
             }
         }
@@ -355,55 +351,73 @@ class CalculatorViewModel @Inject constructor(
         calculateMembershipFee()
     }
 
-    // ✅ ЗАМКИ: сохраняем ТОЛЬКО если данные изменились + только для Тарифа
+    // ✅ ЗАМКИ: сохраняем ТОЛЬКО при изменении Тарифа
     fun toggleMembershipNumberLock() {
         val s = _uiState.value
-        val locked = !s.isMembershipNumberLocked
-        // Просто меняем состояние, без сохранения
-        _uiState.update { it.copy(isMembershipNumberLocked = locked) }
+        _uiState.update { it.copy(isMembershipNumberLocked = !s.isMembershipNumberLocked) }
     }
 
     fun toggleMembershipAreaLock() {
         val s = _uiState.value
-        val locked = !s.isMembershipAreaLocked
-        // Просто меняем состояние, без сохранения
-        _uiState.update { it.copy(isMembershipAreaLocked = locked) }
+        _uiState.update { it.copy(isMembershipAreaLocked = !s.isMembershipAreaLocked) }
     }
 
     fun toggleMembershipTariffLock() {
         val s = _uiState.value
         val locked = !s.isMembershipTariffLocked
-
-        // Сохраняем ТОЛЬКО если: 1) замок закрывается И 2) тариф изменился
         if (locked && s.membershipTariff != prevMembershipTariff) {
             saveMembershipData()
         }
-        // Обновляем "предыдущее" значение, чтобы следующий раз сравнивать с актуальным
         prevMembershipTariff = s.membershipTariff
-
         _uiState.update { it.copy(isMembershipTariffLocked = locked) }
     }
 
+    // ✅ СОХРАНЕНИЕ С ЗАПИСЬЮ В ИСТОРИЮ
     private fun saveMembershipData() {
         val s = _uiState.value
-        val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
+        val ru = Locale("ru", "RU")
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH)) // ✅ ИСПРАВЛЕНО
+        }
+        val dateStr = SimpleDateFormat("dd.MM.yyyy", ru).format(cal.time)
+        val area = s.membershipPlotArea.replace(".", ",")
+        val tariff = s.membershipTariff.replace(".", "").replace(",", "").trim()
+        val sum = s.membershipFeeTotal.replace("₽", "").replace(" ", "").replace(".", ",")
+        val newLine = "$dateStr $area $tariff $sum"
 
+        val oldHistory = getMembershipHistory()
+        val firstLine = oldHistory.lines().firstOrNull()?.trim()
+
+        // Добавляем только если изменилось
+        val updatedHistory = if (firstLine != newLine) {
+            if (oldHistory.isBlank()) newLine else "$newLine\n$oldHistory"
+        } else oldHistory
+
+        saveMembershipHistory(updatedHistory)
+
+        val prefs = context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE)
         prefs.edit()
             .putString(keyNum, s.membershipPlotNumber)
             .putString(keyArea, s.membershipPlotArea)
             .putString(keyTariff, s.membershipTariff)
             .apply()
 
-        createAndSendUnifiedBackup()
+        createUnifiedBackup()
+    }
+
+    private fun getMembershipHistory(): String {
+        return context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE).getString(keyHistory, "") ?: ""
+    }
+
+    private fun saveMembershipHistory(history: String) {
+        context.getSharedPreferences(memPrefsName, Context.MODE_PRIVATE).edit().putString(keyHistory, history).apply()
     }
 
     fun copyMembershipToClipboard() {
         val s = _uiState.value
         val monthName = getPreviousMonthName()
         val year = SimpleDateFormat("yyyy", Locale.getDefault()).format(Date())
-
         val text = "Членский взнос уч.${s.membershipPlotNumber} за $monthName $year"
-
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("membership", text))
         Toast.makeText(context, "Скопировано", Toast.LENGTH_SHORT).show()
@@ -419,11 +433,7 @@ class CalculatorViewModel @Inject constructor(
     }
 
     private fun getPreviousMonthName(): String {
-        val calendar = Calendar.getInstance()
-        calendar.add(Calendar.MONTH, -1)
-        return listOf(
-            "январь", "февраль", "март", "апрель", "май", "июнь",
-            "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"
-        )[calendar.get(Calendar.MONTH)]
+        val calendar = Calendar.getInstance().apply { add(Calendar.MONTH, -1) }
+        return listOf("январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь")[calendar.get(Calendar.MONTH)]
     }
 }
