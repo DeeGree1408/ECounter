@@ -48,7 +48,7 @@ class CalculatorViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(CalculatorUiState())
     val uiState: StateFlow<CalculatorUiState> = _uiState.asStateFlow()
 
-    // 💰 Членский взнос: ключи
+    //  Членский взнос: ключи
     private val memPrefsName = "membership_fee_prefs_v2"
     private val keyNum = "membership_number"
     private val keyArea = "membership_area"
@@ -136,13 +136,13 @@ class CalculatorViewModel @Inject constructor(
             val tariff = state.tariff.toDoubleOrNull()
 
             if (current == null || previous == null || tariff == null) {
-                _uiState.update { it.copy(error = "❌ Заполните все поля корректными числами!") }
+                _uiState.update { it.copy(error = " Заполните все поля корректными числами!") }
                 return@launch
             }
             if (current < previous) {
                 _uiState.update {
                     it.copy(
-                        error = "⚠️ ВНИМАНИЕ!\nТекущие показания меньше предыдущих.\nВозможно, был сброс счётчика.",
+                        error = "️ ВНИМАНИЕ!\nТекущие показания меньше предыдущих.\nВозможно, был сброс счётчика.",
                         showResult = true
                     )
                 }
@@ -263,7 +263,7 @@ class CalculatorViewModel @Inject constructor(
                     // Fallback: если истории нет, генерируем текущие значения
                     val s = _uiState.value
                     val cal = Calendar.getInstance().apply {
-                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH)) // ✅ ИСПРАВЛЕНО
+                        set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
                     }
                     val date = SimpleDateFormat("dd.MM.yyyy", ru).format(cal.time)
                     val area = s.membershipPlotArea.replace(".", ",")
@@ -279,8 +279,8 @@ class CalculatorViewModel @Inject constructor(
                     val intent = Intent(Intent.ACTION_SEND).apply {
                         type = "message/rfc822"
                         putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                        putExtra(Intent.EXTRA_SUBJECT, "Бэкап: ЭЭ + ЧВ ($timestamp)")
-                        putExtra(Intent.EXTRA_TEXT, "Данные во вложении.")
+                        putExtra(Intent.EXTRA_SUBJECT, "Бэкап: ЭЭ + ЧВ $timestamp")
+                        putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
                         putExtra(Intent.EXTRA_STREAM, uri)
                         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
@@ -303,7 +303,7 @@ class CalculatorViewModel @Inject constructor(
         💰 ТАРИФ: ${String.format(ru, "%.2f", reading.tariff)} ₽/кВт·ч
         🏦 СУММА К ОПЛАТЕ: ${String.format(ru, "%.2f", reading.amount)} ₽
         
-        📅 Дата передачи: ${reading.date.formatToDisplay()}
+         Дата передачи: ${reading.date.formatToDisplay()}
         🔄 Показания: ${reading.previousReading.toInt()} → ${reading.currentReading.toInt()}
         
         ✅ Предыдущие показания обновлены | ✅ Запись в истории | 📧 Отправлено
@@ -377,7 +377,7 @@ class CalculatorViewModel @Inject constructor(
         val s = _uiState.value
         val ru = Locale("ru", "RU")
         val cal = Calendar.getInstance().apply {
-            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH)) // ✅ ИСПРАВЛЕНО
+            set(Calendar.DAY_OF_MONTH, getActualMaximum(Calendar.DAY_OF_MONTH))
         }
         val dateStr = SimpleDateFormat("dd.MM.yyyy", ru).format(cal.time)
         val area = s.membershipPlotArea.replace(".", ",")

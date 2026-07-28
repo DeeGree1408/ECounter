@@ -33,7 +33,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -148,22 +147,20 @@ fun RemindersScreen(
                             checked = uiState.isReminderEnabled,
                             onCheckedChange = { enabled ->
                                 viewModel.toggleReminder(enabled)
-
                                 if (enabled) {
                                     if (PermissionHelper.hasNotificationPermission(context)) {
                                         scope.launch(Dispatchers.IO) {
                                             try {
                                                 val db = AppDatabase.getInstance(context)
                                                 val lastDateMillis = db.readingDao().getLatest()?.date
-                                                android.util.Log.d("REMINDER_FIX", " Читаю дату из БД: $lastDateMillis")
-
+                                                android.util.Log.d("REMINDER_FIX", "📥 Читаю дату из БД: $lastDateMillis")
                                                 withContext(Dispatchers.Main) {
                                                     scheduler.scheduleReminder(lastDateMillis)
                                                 }
                                             } catch (e: Exception) {
                                                 android.util.Log.e("REMINDER_FIX", "❌ Ошибка чтения БД", e)
                                                 withContext(Dispatchers.Main) {
-                                                    scheduler.scheduleReminder() // фоллбэк только при ошибке
+                                                    scheduler.scheduleReminder()
                                                 }
                                             }
                                         }
@@ -196,11 +193,16 @@ fun RemindersScreen(
                                 fontSize = 16.sp
                             )
 
+                            // ✅ ИСПРАВЛЕННЫЙ ЭКСПОРТ
                             Button(
                                 onClick = {
                                     viewModel.exportHistory { exportText ->
                                         try {
-                                            val fileName = "history_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.txt"
+                                            // ✅ Формируем имя файла и тему письма
+                                            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                                            val fileName = "backup_full_$timestamp.txt"
+                                            val subjectDate = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())
+
                                             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                                             val file = File(downloadsDir, fileName)
                                             file.writeText(exportText, Charsets.UTF_8)
@@ -208,9 +210,8 @@ fun RemindersScreen(
                                             val emailIntent = Intent(Intent.ACTION_SEND).apply {
                                                 type = "message/rfc822"
                                                 putExtra(Intent.EXTRA_EMAIL, arrayOf("lbvsx@mail.ru"))
-                                                putExtra(Intent.EXTRA_SUBJECT, "показания счётчика ${SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date())}")
+                                                putExtra(Intent.EXTRA_SUBJECT, "Бэкап: ЭЭ + ЧВ $subjectDate")
                                                 putExtra(Intent.EXTRA_TEXT, "История показаний во вложении.\n\nОтправлено из приложения Электросчётчик")
-
                                                 val uri = androidx.core.content.FileProvider.getUriForFile(
                                                     context,
                                                     "${context.packageName}.fileprovider",
@@ -219,14 +220,12 @@ fun RemindersScreen(
                                                 putExtra(Intent.EXTRA_STREAM, uri)
                                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                             }
-
                                             try {
                                                 context.startActivity(Intent.createChooser(emailIntent, "Отправить историю"))
                                                 Toast.makeText(context, "✅ Файл сохранен: $fileName", Toast.LENGTH_LONG).show()
                                             } catch (e: Exception) {
                                                 Toast.makeText(context, "❌ Нет почтового приложения", Toast.LENGTH_LONG).show()
                                             }
-
                                         } catch (e: Exception) {
                                             Toast.makeText(context, "❌ Ошибка: ${e.message}", Toast.LENGTH_LONG).show()
                                         }
@@ -328,6 +327,7 @@ fun RemindersScreen(
                         }
                     }
 
+                    // ✅ ВОССТАНОВЛЕННАЯ ДИАГНОСТИКА (без isBatteryOptimizationDisabled)
                     DiagnosticSection(scheduler = scheduler)
 
                     Button(
@@ -339,6 +339,32 @@ fun RemindersScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+// ✅ ВОССТАНОВЛЕННАЯ ФУНКЦИЯ (одна, без дублей)
+@Composable
+fun DiagnosticSection(scheduler: ReminderScheduler) {
+    var manufacturer by remember { mutableStateOf("Unknown") }
+    var canScheduleExact by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        manufacturer = android.os.Build.MANUFACTURER
+        canScheduleExact = scheduler.canScheduleExactAlarms()
+        // isBatteryOptimizationDisabled() убран — метода нет в ReminderScheduler
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Column(modifier = Modifier.padding(10.dp)) {
+            Text(text = "🔍 Диагностика", fontWeight = FontWeight.Bold, color = Color(0xFF1E3C72), fontSize = 14.sp)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = "Производитель: $manufacturer", fontSize = 11.sp, color = Color(0xFF333333))
+            Text(text = "Точные будильники: ${if (canScheduleExact) "✅ Разрешено" else "❌ Запрещено"}", fontSize = 11.sp, color = Color(0xFF333333))
+            // Строка про оптимизацию батареи убрана, так как метода нет
         }
     }
 }
