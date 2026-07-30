@@ -343,28 +343,3 @@ fun RemindersScreen(
     }
 }
 
-// ✅ ВОССТАНОВЛЕННАЯ ФУНКЦИЯ (одна, без дублей)
-@Composable
-fun DiagnosticSection(scheduler: ReminderScheduler) {
-    var manufacturer by remember { mutableStateOf("Unknown") }
-    var canScheduleExact by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        manufacturer = android.os.Build.MANUFACTURER
-        canScheduleExact = scheduler.canScheduleExactAlarms()
-        // isBatteryOptimizationDisabled() убран — метода нет в ReminderScheduler
-    }
-
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFFF3E5F5)),
-        shape = RoundedCornerShape(8.dp)
-    ) {
-        Column(modifier = Modifier.padding(10.dp)) {
-            Text(text = "🔍 Диагностика", fontWeight = FontWeight.Bold, color = Color(0xFF1E3C72), fontSize = 14.sp)
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(text = "Производитель: $manufacturer", fontSize = 11.sp, color = Color(0xFF333333))
-            Text(text = "Точные будильники: ${if (canScheduleExact) "✅ Разрешено" else "❌ Запрещено"}", fontSize = 11.sp, color = Color(0xFF333333))
-            // Строка про оптимизацию батареи убрана, так как метода нет
-        }
-    }
-}
