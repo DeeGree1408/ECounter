@@ -224,15 +224,15 @@ class CalculatorViewModel @Inject constructor(
             )
         }
         preferencesHelper.setPreviousLocked(true)
-        stopRemindersIfEnabled()
+        stopRemindersIfEnabled(reading.date)  // ✅ Передаём дату из Reading
         createUnifiedBackup()
     }
 
-    private fun stopRemindersIfEnabled() {
+    private fun stopRemindersIfEnabled(lastReadingDateMillis: Long? = null) {
         if (preferencesHelper.isReminderEnabled()) {
             val scheduler = ReminderScheduler(context)
             scheduler.cancelReminders()
-            scheduler.scheduleReminder()
+            scheduler.scheduleReminder(lastReadingDateMillis)  // ✅ Передаём дату
         }
     }
 

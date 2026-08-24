@@ -40,15 +40,28 @@ class ReminderScheduler(private val context: Context) {
         val currentHour = now.get(Calendar.HOUR_OF_DAY)
         val triggerCalendar = Calendar.getInstance()
 
-        // === ЛОГИКА РАСЧЁТА ===
+        // === ЛОГИКА РАСЧЁТА (исправленная) ===
+        val inGracePeriod = currentDay >= 1 && currentDay <= 3
+
         if (lastReadingDateMillis != null) {
-            // Есть дата из БД: сравниваем месяц
             val lastCal = Calendar.getInstance().apply { timeInMillis = lastReadingDateMillis }
             val lastMonth = lastCal.get(Calendar.MONTH)
             val currentMonth = now.get(Calendar.MONTH)
 
-            if (lastMonth != currentMonth) {
-                // Ввод был в прошлом цикле → напоминаем СЕГОДНЯ в 12:00:00
+            // ✅ Учёт льготного периода (1-3 число)
+            if (inGracePeriod) {
+                // Ввод в льготный период → считаем это частью ПРЕДЫДУЩЕГО цикла
+                // Напоминаем 24-го ТЕКУЩЕГО месяца
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    24,
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                Log.d(TAG, "📅 Логика А+: ввод в льготный период → ${triggerCalendar.time}")
+            } else if (lastMonth != currentMonth) {
+                // Ввод был в прошлом цикле (не в льготный период) → напоминаем СЕГОДНЯ в 12:00
                 triggerCalendar.set(
                     now.get(Calendar.YEAR),
                     now.get(Calendar.MONTH),
@@ -73,8 +86,19 @@ class ReminderScheduler(private val context: Context) {
                 Log.d(TAG, "📅 Логика Б: ввод в этом месяце → ${triggerCalendar.time}")
             }
         } else {
-            // Нет даты (fallback): считаем от текущей даты
-            if (currentDay >= 24 || currentDay <= 3) {
+            // Fallback: нет даты из БД
+            if (inGracePeriod) {
+                // Льготный период → напоминаем 24-го ТЕКУЩЕГО месяца
+                triggerCalendar.set(
+                    now.get(Calendar.YEAR),
+                    now.get(Calendar.MONTH),
+                    24,
+                    12, 0, 0
+                )
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                Log.d(TAG, "📅 Логика В+: нет данных, льготный период → ${triggerCalendar.time}")
+            } else if (currentDay >= 24) {
+                // После 24-го → напоминаем 24-го СЛЕДУЮЩЕГО месяца
                 triggerCalendar.set(
                     now.get(Calendar.YEAR),
                     now.get(Calendar.MONTH),
@@ -83,8 +107,9 @@ class ReminderScheduler(private val context: Context) {
                 )
                 triggerCalendar.set(Calendar.MILLISECOND, 0)
                 triggerCalendar.add(Calendar.MONTH, 1)
-                Log.d(TAG, "📅 Логика В: нет данных, окно ввода → ${triggerCalendar.time}")
+                Log.d(TAG, "📅 Логика В: нет данных, после 24-го → ${triggerCalendar.time}")
             } else {
+                // 4-23 число → напоминаем 24-го ТЕКУЩЕГО месяца
                 triggerCalendar.set(
                     now.get(Calendar.YEAR),
                     now.get(Calendar.MONTH),
