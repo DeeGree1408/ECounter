@@ -23,10 +23,8 @@ class ReminderScheduler(private val context: Context) {
 
     fun scheduleReminder(lastReadingDateMillis: Long? = null) {
         Log.d(TAG, "=== scheduleReminder START ===")
-        Log.d(TAG, "🔍 lastReadingDateMillis=$lastReadingDateMillis")
-
         if (!canScheduleExactAlarms()) {
-            Log.e(TAG, " Нет разрешения SCHEDULE_EXACT_ALARM")
+            Log.e(TAG, "❌ Нет разрешения SCHEDULE_EXACT_ALARM")
             requestExactAlarmPermission()
             return
         }
@@ -34,82 +32,47 @@ class ReminderScheduler(private val context: Context) {
         val now = Calendar.getInstance()
         val currentDay = now.get(Calendar.DAY_OF_MONTH)
         val currentHour = now.get(Calendar.HOUR_OF_DAY)
-        val currentMonth = now.get(Calendar.MONTH)
-        val previousMonth = if (currentMonth == 0) 11 else currentMonth - 1
         val triggerCalendar = Calendar.getInstance()
 
-        val inGracePeriod = currentDay >= 1 && currentDay <= 3
+        val isWindowOpen = currentDay >= 24 || currentDay <= 3
+        val hasData = lastReadingDateMillis != null
 
-        if (inGracePeriod) {
-            // 🔹 Льготный период (1-3 число)
-            if (lastReadingDateMillis != null) {
-                val lastCal = Calendar.getInstance().apply { timeInMillis = lastReadingDateMillis }
-                val lastMonth = lastCal.get(Calendar.MONTH)
-
-                if (lastMonth == previousMonth) {
-                    // ✅ За предыдущий месяц всё передано. Ждём следующего цикла.
-                    triggerCalendar.set(now.get(Calendar.YEAR), currentMonth, 24, 12, 0, 0)
-                    Log.d(TAG, "📅 Логика А1: льготный период, всё ок -> 24.${currentMonth + 1}")
-                } else {
-                    // ❌ Пропущен цикл (например, последний ввод был в июле, а сейчас сентябрь)
-                    // Напоминаем срочно: сегодня в 12:00 или завтра, если уже прошли полдень
-                    triggerCalendar.set(now.get(Calendar.YEAR), currentMonth, currentDay, 12, 0, 0)
-                    triggerCalendar.set(Calendar.MILLISECOND, 0)
-                    if (currentHour >= 12) triggerCalendar.add(Calendar.DAY_OF_MONTH, 1)
-                    Log.d(TAG, "📅 Логика А2: льготный период, пропуск цикла -> ${triggerCalendar.time}")
+        if (isWindowOpen) {
+            // 🟢 ОКНО ОТКРЫТО (24–03 число)
+            if (hasData) {
+                // Данные уже переданы → ставим на начало следующего цикла (ближайшее 24 число)
+                triggerCalendar.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), 24, 12, 0, 0)
+                triggerCalendar.set(Calendar.MILLISECOND, 0)
+                if (triggerCalendar.timeInMillis <= System.currentTimeMillis()) {
+                    triggerCalendar.add(Calendar.MONTH, 1)
                 }
+                Log.d(TAG, "📅 Окно открыто, данные есть → ${triggerCalendar.time}")
             } else {
-                // Нет данных вообще -> срочно
-                triggerCalendar.set(now.get(Calendar.YEAR), currentMonth, currentDay, 12, 0, 0)
+                // Данных нет → напоминаем сейчас (или завтра, если уже после 12:00)
+                triggerCalendar.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), currentDay, 12, 0, 0)
                 triggerCalendar.set(Calendar.MILLISECOND, 0)
                 if (currentHour >= 12) triggerCalendar.add(Calendar.DAY_OF_MONTH, 1)
-                Log.d(TAG, "📅 Логика А3: льготный период, нет данных -> ${triggerCalendar.time}")
-            }
-        } else if (lastReadingDateMillis != null) {
-            // 🔹 Не в льготном периоде
-            val lastCal = Calendar.getInstance().apply { timeInMillis = lastReadingDateMillis }
-            val lastMonth = lastCal.get(Calendar.MONTH)
-
-            if (lastMonth != currentMonth) {
-                // Ввод в прошлом цикле -> напоминаем СЕГОДНЯ
-                triggerCalendar.set(now.get(Calendar.YEAR), currentMonth, currentDay, 12, 0, 0)
-                triggerCalendar.set(Calendar.MILLISECOND, 0)
-                if (currentHour >= 12) triggerCalendar.add(Calendar.DAY_OF_MONTH, 1)
-                Log.d(TAG, "📅 Логика Б: прошлый цикл -> сегодня")
-            } else {
-                // Ввод в этом месяце -> ждём 24 числа след. месяца
-                triggerCalendar.set(now.get(Calendar.YEAR), currentMonth, 24, 12, 0, 0)
-                triggerCalendar.set(Calendar.MILLISECOND, 0)
-                triggerCalendar.add(Calendar.MONTH, 1)
-                Log.d(TAG, "📅 Логика В: этот месяц -> 24.${currentMonth + 2}")
+                Log.d(TAG, "📅 Окно открыто, данных нет → ${triggerCalendar.time}")
             }
         } else {
-            // 🔹 Fallback: нет даты из БД
-            if (currentDay >= 24) {
-                triggerCalendar.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), 24, 12, 0, 0)
-                triggerCalendar.set(Calendar.MILLISECOND, 0)
-                triggerCalendar.add(Calendar.MONTH, 1)
-                Log.d(TAG, "📅 Логика Г: нет данных, после 24-го -> след. месяц")
-            } else {
-                triggerCalendar.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), 24, 12, 0, 0)
-                triggerCalendar.set(Calendar.MILLISECOND, 0)
-                Log.d(TAG, "📅 Логика Д: нет данных, 4-23 число -> 24.${now.get(Calendar.MONTH) + 1}")
-            }
+            // 🔴 ОКНО ЗАКРЫТО (4–23 число)
+            // По твоему правилу: тишина до 24 числа
+            triggerCalendar.set(now.get(Calendar.YEAR), now.get(Calendar.MONTH), 24, 12, 0, 0)
+            triggerCalendar.set(Calendar.MILLISECOND, 0)
+            Log.d(TAG, "📅 Окно закрыто → ${triggerCalendar.time}")
         }
 
         val triggerTime = triggerCalendar.timeInMillis
         val pendingIntent = createPendingIntent()
 
         if (isHuaweiDevice()) {
-            Log.d(TAG, "📱 Обнаружен Huawei - используем setAlarmClock()")
             scheduleWithAlarmClock(triggerTime, pendingIntent)
         } else {
-            Log.d(TAG, " Обычное устройство - используем setExactAndAllowWhileIdle()")
             scheduleWithExactAlarm(triggerTime, pendingIntent)
         }
 
         saveNextAlarmTime(triggerTime)
-        Log.d(TAG, "✅ Напоминание на: ${triggerCalendar.time}")
+        Log.d(TAG, "✅ Напоминание установлено: ${triggerCalendar.time}")
         Log.d(TAG, "=== scheduleReminder END ===")
     }
 
@@ -232,7 +195,7 @@ class ReminderScheduler(private val context: Context) {
                 val intent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 context.startActivity(intent)
-                Log.d(TAG, "🚀 Открыты настройки оптимизации батареи")
+                Log.d(TAG, " Открыты настройки оптимизации батареи")
             }
         } catch (e: Exception) {
             Log.e(TAG, "❌ Ошибка открытия настроек батареи: ${e.message}", e)
@@ -269,7 +232,7 @@ class ReminderScheduler(private val context: Context) {
         }
     }
 
-    // ✅ ИСПРАВЛЕНО: Сначала читаем из наших SharedPreferences (надёжно на Huawei)
+    // ✅ Читаем из наших SharedPreferences (надёжно на Huawei)
     fun getNextAlarmTime(): Long? {
         val prefs = context.getSharedPreferences("electricity_counter", Context.MODE_PRIVATE)
         val savedTime = prefs.getLong("next_alarm_time", 0L)
@@ -278,7 +241,6 @@ class ReminderScheduler(private val context: Context) {
             return savedTime
         }
 
-        // Fallback: системный API (может быть неточным)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val nextAlarmInfo = alarmManager.nextAlarmClock
             nextAlarmInfo?.triggerTime?.also {
